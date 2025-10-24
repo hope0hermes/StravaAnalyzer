@@ -1,0 +1,161 @@
+# Automated Release Workflow
+#
+# This workflow automatically manages versioning and releases based on commit messages.
+# It uses Conventional Commits to determine the version bump type.
+#
+# When it runs:
+# - Automatically: When a PR is merged to main (via "push: branches: [main]")
+# - Manually: Via GitHub Actions UI (workflow_dispatch button)
+#
+# What it does:
+# 1. Analyzes commit messages since last release
+# 2. Determines version bump type (major/minor/patch/none)
+# 3. Updates version in src/strava_analyzer/__init__.py using hatch
+# 4. Updates CHANGELOG.md with new version and commit list
+# 5. Commits version bump back to main with [skip ci] to avoid recursion
+# 6. Creates git tag (e.g., v1.1.0)
+# 7. Creates GitHub Release with tag
+#
+# Conventional Commit Format → Version Bump:
+# - "feat:" or "feature:" → MINOR bump (1.0.0 → 1.1.0) - New features
+# - "fix:" or "bugfix:" → PATCH bump (1.0.0 → 1.0.1) - Bug fixes
+# - "feat!:" or "BREAKING CHANGE:" → MAJOR bump (1.0.0 → 2.0.0) - Breaking changes
+# - "chore:", "docs:", "ci:", "style:", "test:" → NO bump - No user-facing changes
+#
+# Version Management:
+# - Version stored in: src/strava_analyzer/__init__.py (__version__ = "1.0.0")
+# - Hatch reads/writes version automatically (configured in pyproject.toml)
+# - Single source of truth prevents version conflicts
+#
+# Important Notes:
+# - Use [skip ci] in commit message to prevent infinite workflow loops
+# - Requires "contents: write" permission to push commits and create releases
+# - fetch-depth: 0 ensures we have full git history to find previous tags
+# - If no previous tag exists, analyzes all commits in repository
+
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # Required to push commits and create releases
+      pull-requests: write   # Required if you want to comment on PRs
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history so we can find previous tags
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch  # Needed for "hatch version" command
+
+    - name: Configure Git
+      run: |
+        # Set git identity for the version bump commit
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Determine version bump type
+      id: bump_type
+      run: |
+        # Get all commit messages since last tag (or all commits if no tags)
+        if git describe --tags --abbrev=0 2>/dev/null; then
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"%s")
+        else
+          COMMITS=$(git log --pretty=format:"%s")
+        fi
+
+        echo "Commits: $COMMITS"
+
+        # Analyze commits using regex patterns for Conventional Commits
+        # Priority: major > minor > patch > none (if any commit is major, bump major)
+        if echo "$COMMITS" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
+          BUMP="major"  # Breaking changes: 1.0.0 → 2.0.0
+        elif echo "$COMMITS" | grep -qE "^(feat|feature)(\(.+\))?:"; then
+          BUMP="minor"  # New features: 1.0.0 → 1.1.0
+        elif echo "$COMMITS" | grep -qE "^(fix|bugfix|perf|refactor)(\(.+\))?:"; then
+          BUMP="patch"  # Bug fixes: 1.0.0 → 1.0.1
+        else
+          BUMP="none"   # No version bump (chore, docs, ci, etc.)
+        fi
+
+        # Save bump type to GitHub Actions output for use in later steps
+        echo "bump_type=$BUMP" >> $GITHUB_OUTPUT
+        echo "Determined bump type: $BUMP"
+
+    - name: Bump version
+      if: steps.bump_type.outputs.bump_type != 'none'
+      id: version
+      run: |
+        # Get current version
+        OLD_VERSION=$(hatch version)
+
+        # Bump version using hatch (automatically updates __init__.py)
+        hatch version ${{ steps.bump_type.outputs.bump_type }}
+
+        # Get new version and save to outputs
+        NEW_VERSION=$(hatch version)
+        echo "old_version=$OLD_VERSION" >> $GITHUB_OUTPUT
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "Bumped version from $OLD_VERSION to $NEW_VERSION"
+
+    - name: Update CHANGELOG
+      if: steps.bump_type.outputs.bump_type != 'none'
+      run: |
+        NEW_VERSION="${{ steps.version.outputs.new_version }}"
+        DATE=$(date +%Y-%m-%d)
+
+        # Get commits since last tag for changelog (excluding merge commits)
+        if git describe --tags --abbrev=0 2>/dev/null; then
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        else
+          COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        fi
+
+        # Insert new version section after [Unreleased] header
+        # sed -i does in-place editing of CHANGELOG.md
+        sed -i "/^## \[Unreleased\]/a\\
+\\n## [$NEW_VERSION] - $DATE\\n\\n### Changed\\n$COMMITS\\n" CHANGELOG.md
+
+        echo "Updated CHANGELOG.md"
+
+    - name: Commit and push version bump
+      if: steps.bump_type.outputs.bump_type != 'none'
+      run: |
+        git add src/strava_analyzer/__init__.py CHANGELOG.md
+
+        # [skip ci] prevents this commit from triggering workflows again (avoid infinite loop)
+        git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]"
+
+        git push origin main
+
+    - name: Create GitHub Release
+      if: steps.bump_type.outputs.bump_type != 'none'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.new_version }}
+        release_name: Release v${{ steps.version.outputs.new_version }}
+        body: |
+          ## What's Changed
+
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false

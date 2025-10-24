@@ -1,0 +1,4 @@
+id;name;type;start_date;distance;moving_time;total_time;elevation_gain;average_speed;max_speed
+12345678;Morning Ride;Ride;2024-01-15T08:30:00Z;25000;3600;3900;250;6.944;12.5
+12345679;Evening Ride;Ride;2024-01-16T18:00:00Z;30000;4200;4500;300;7.143;13.2
+12345680;Weekend Long;Ride;2024-01-20T09:00:00Z;80000;14400;15000;1200;5.556;14.8

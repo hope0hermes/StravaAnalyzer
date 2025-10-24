@@ -1,0 +1,43 @@
+data_dir: "/home/hope0hermes/Workspace/StravaAnalyzer/tests/data"
+processed_data_dir: "/home/hope0hermes/Workspace/StravaAnalyzer/temp"
+
+# Activities and streams paths will be relative to data_dir
+activities_file: "activities.csv"
+streams_dir: "Streams"
+verbose: true
+force: true
+
+# Athlete Specific Settings
+rider_weight_kg: 77.0  # Your weight in kilograms
+ftp: 285.0  # Functional Threshold Power in watts
+fthr: 170  # Functional Threshold Heart Rate in bpm
+ftpace: 4.0  # Functional Threshold Pace in min/km
+
+# Grade Adjustment Configuration
+grade_adjustment:
+  uphill_factor: 0.5
+  downhill_factor: 0.3
+  grade_smoothing_window: 30
+
+# Heart Rate Zone Configuration
+hr_zones:
+  zone1_upper: 0.60  # Recovery
+  zone2_upper: 0.70  # Endurance
+  zone3_upper: 0.80  # Tempo
+  zone4_upper: 0.90  # Threshold
+  zone5_upper: 1.00  # VO2max
+
+# hrTSS Configuration
+hr_tss:
+  zone1_factor: 0.2
+  zone2_factor: 0.4
+  zone3_factor: 0.6
+  zone4_factor: 0.8
+  zone5_factor: 1.0
+  zone6_factor: 1.2
+
+# Analysis Configuration
+ftp_estimation_factor: 0.95
+ftp_rolling_window_days: 42
+atl_days: 7
+ctl_days: 28

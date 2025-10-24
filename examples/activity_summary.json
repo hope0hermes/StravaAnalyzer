@@ -1,0 +1,23 @@
+{
+  "period_start": "2025-04-08 10:09:42+00:00",
+  "period_end": "2025-10-08 09:53:08+00:00",
+  "total_activities": 95,
+  "total_distance": 3415051.7,
+  "total_elevation": 27434.0,
+  "total_time": 395492.0,
+  "training_load": {
+    "chronic_training_load": 109.71907883107,
+    "acute_training_load": 124.43725846075829,
+    "training_stress_balance": -14.718179629688294,
+    "acwr": 1.1341442143562768
+  },
+  "performance_trends": {
+    "raw_ef_4week_avg": 1.4939812528436307,
+    "raw_ef_52week_avg": 1.7119063681600641,
+    "raw_ef_overall_avg": 1.7119063681600641,
+    "moving_ef_4week_avg": 1.4939945785604778,
+    "moving_ef_52week_avg": 1.7125126825635584,
+    "moving_ef_overall_avg": 1.7125126825635584
+  },
+  "zone_distributions": {}
+}

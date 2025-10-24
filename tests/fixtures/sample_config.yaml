@@ -1,0 +1,24 @@
+ftp: 285
+fthr: 170
+ftpace: 5.0
+rider_weight_kg: 77.0
+
+data_dir: data
+activities_file: activities.csv
+streams_dir: Streams
+processed_data_dir: processed_data
+
+power_zones:
+  power_zone_1: [0, 157]
+  power_zone_2: [158, 214]
+  power_zone_3: [215, 256]
+  power_zone_4: [257, 300]
+  power_zone_5: [301, 342]
+  power_zone_6: [343, 9999]
+
+hr_zone_ranges:
+  hr_zone_1: [39, 110]
+  hr_zone_2: [111, 129]
+  hr_zone_3: [130, 147]
+  hr_zone_4: [148, 166]
+  hr_zone_5: [167, 999]
