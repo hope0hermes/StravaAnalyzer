@@ -1,0 +1,67 @@
+# Tests Workflow
+#
+# This workflow runs linting and tests on every pull request to main and after merges to main.
+#
+# Trigger Strategy:
+# - "push: branches: [main]" - Runs after PR merges to main (verification)
+# - "pull_request: branches: [main]" - Runs on PRs targeting main (pre-merge check)
+#
+# Why NOT "branches: ['**']" for push?
+# - Would cause duplicate runs: once for push to feature branch, once for PR
+# - Current config runs ONCE per PR (only on PR event, not push to feature branch)
+# - Saves CI resources and keeps checks cleaner
+#
+# When tests run:
+# 1. You push to feature branch with open PR → Runs ONCE (via pull_request trigger)
+# 2. You push to feature branch without PR → Does NOT run (no waste)
+# 3. PR gets merged to main → Runs ONCE (via push to main trigger)
+
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Test on Python 3.12 only to save CI time
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch
+
+    - name: Run linting
+      run: |
+        # Runs: ruff check, ruff format --check, mypy, pylint, pydocstyle
+        # Defined in [tool.hatch.envs.lint.scripts] in pyproject.toml
+        hatch run lint:default
+
+    - name: Run tests with coverage
+      run: |
+        # Runs: pytest with coverage reporting (XML, HTML, terminal)
+        # Defined in [tool.hatch.envs.test.scripts] in pyproject.toml
+        hatch run test:cov
+
+# Concurrency control:
+# - If you push multiple commits quickly to the same PR, old test runs are cancelled
+# - Saves CI resources by not running outdated code
+# - "group" identifies the workflow run (different PRs run independently)
+# - "cancel-in-progress: true" cancels old runs when new ones start
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
