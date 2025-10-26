@@ -1,6 +1,6 @@
 """Strava Analyzer - a package for analyzing Strava activity data."""
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 from . import analysis, constants, data, exceptions, metrics, models, services
 from .analysis import ActivityAnalyzer, ActivitySummarizer, ThresholdEstimator
