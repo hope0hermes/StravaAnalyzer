@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2025-10-26
+
+### Changed
+- fix: trigger version bump to test skip logic (4b04940)
+- docs: test skip logic verification (d99bc1d)
+
+
 ## [1.0.4] - 2025-10-26
 
 ### Changed
