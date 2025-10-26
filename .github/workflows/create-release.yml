@@ -1,0 +1,91 @@
+# Auto-create GitHub Release
+#
+# This workflow automatically creates a GitHub Release after a version bump PR is merged.
+# It detects version bump commits and creates a release with the corresponding tag.
+#
+# When it runs:
+# - Automatically: When a PR is merged to main that contains a version bump commit
+#
+# What it does:
+# 1. Detects if the merged commit is a version bump (starts with "chore: bump version")
+# 2. Extracts the version number from the commit message
+# 3. Creates a git tag for the version
+# 4. Creates a GitHub Release with the tag and CHANGELOG excerpt
+
+name: Create Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Check if this is a version bump commit
+      id: check_version_bump
+      run: |
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+        echo "Commit message: $COMMIT_MSG"
+
+        if echo "$COMMIT_MSG" | grep -qiE "^chore: bump version to"; then
+          echo "is_version_bump=true" >> $GITHUB_OUTPUT
+          # Extract version number (handles optional PR number like (#22))
+          VERSION=$(echo "$COMMIT_MSG" | sed -n 's/^[Cc]hore: bump version to \([0-9.]*\).*/\1/p')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "This is a version bump to $VERSION"
+        else
+          echo "is_version_bump=false" >> $GITHUB_OUTPUT
+          echo "Not a version bump commit"
+        fi
+
+    - name: Create GitHub Release
+      if: steps.check_version_bump.outputs.is_version_bump == 'true'
+      run: |
+        VERSION="${{ steps.check_version_bump.outputs.version }}"
+        
+        echo "Creating release for version: $VERSION"
+
+        # Extract release notes from CHANGELOG.md for this version
+        RELEASE_NOTES=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
+        
+        echo "Release notes:"
+        echo "$RELEASE_NOTES"
+        
+        # Check if release already exists
+        if gh release view "v$VERSION" 2>/dev/null; then
+          echo "❌ Release v$VERSION already exists, skipping"
+          exit 0
+        fi
+        
+        echo "Release does not exist, creating..."
+
+        # Create release (this will also create the tag if it doesn't exist)
+        if gh release create "v$VERSION" \
+          --target main \
+          --title "Release v$VERSION" \
+          --notes "$RELEASE_NOTES"; then
+          echo "✅ Successfully created release v$VERSION with tag"
+        else
+          echo "❌ Failed to create release v$VERSION"
+          exit 1
+        fi
+        
+        # Verify the release was created
+        echo "Verifying release..."
+        gh release view "v$VERSION"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
