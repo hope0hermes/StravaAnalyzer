@@ -41,7 +41,16 @@ jobs:
         COMMIT_MSG=$(git log -1 --pretty=format:"%s")
         echo "Commit message: $COMMIT_MSG"
 
-        if echo "$COMMIT_MSG" | grep -qiE "^chore: bump version to"; then
+        # Check if this is a merge from a release branch
+        if echo "$COMMIT_MSG" | grep -qE "Merge pull request #[0-9]+ from .*/release/v"; then
+          echo "Detected release branch merge"
+          # Extract version from branch name in merge commit
+          VERSION=$(echo "$COMMIT_MSG" | sed -n 's/.*\/release\/v\([0-9.]*\).*/\1/p')
+          echo "is_version_bump=true" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "This is a version bump to $VERSION"
+        # Check if the commit message itself is a version bump
+        elif echo "$COMMIT_MSG" | grep -qiE "^chore: bump version to"; then
           echo "is_version_bump=true" >> $GITHUB_OUTPUT
           # Extract version number (handles optional PR number like (#22))
           VERSION=$(echo "$COMMIT_MSG" | sed -n 's/^[Cc]hore: bump version to \([0-9.]*\).*/\1/p')
