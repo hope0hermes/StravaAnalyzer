@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2025-10-26
+
+### Changed
+- fix: prevent infinite loop by detecting release PR merges (0c0e1be)
+- chore: trigger CI checks (8b254a1)
+- chore: bump version to 1.0.1 (446fc7f)
+- chore: trigger CI checks (62c1a38)
+- fix: update release workflows to PR-based approach (ef66dbc)
+
+
 ## [1.0.1] - 2025-10-26
 
 ### Changed
