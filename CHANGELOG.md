@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-10-26
+
+### Changed
+- fix: use job-level conditional to skip tests on version bumps (f62494c)
+
+
 ## [1.0.5] - 2025-10-26
 
 ### Changed
