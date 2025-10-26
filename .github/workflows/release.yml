@@ -73,8 +73,11 @@ jobs:
         COMMIT_MSG=$(git log -1 --pretty=format:"%s")
         echo "Last commit: $COMMIT_MSG"
 
-        # Skip if commit contains [skip ci] or is a version bump commit
-        if echo "$COMMIT_MSG" | grep -qE "\[skip ci\]|^chore: bump version"; then
+        # Skip if:
+        # 1. Commit contains [skip ci]
+        # 2. Commit message starts with "chore: bump version"
+        # 3. Commit is a merge from a release/ branch (version bump PR merge)
+        if echo "$COMMIT_MSG" | grep -qE "\[skip ci\]|^chore: bump version|^Merge pull request .* from .*/release/"; then
           echo "should_skip=true" >> $GITHUB_OUTPUT
           echo "Skipping release workflow (version bump or [skip ci] commit)"
         else
