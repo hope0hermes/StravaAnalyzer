@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-10-26
+
+### Changed
+- chore: trigger CI checks (62c1a38)
+- fix: update release workflows to PR-based approach (ef66dbc)
+
+
 ## [1.0.0] - 2025-10-24
 
 ### Added
