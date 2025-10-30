@@ -1,100 +1,30 @@
-# Commit Message Linter
+# Lint Commit Messages
 #
-# This workflow validates that PR titles and commit messages follow Conventional Commits format.
-# It will FAIL the check if messages don't follow the format, preventing merge.
+# This workflow validates that commit messages follow the Conventional Commits format.
+# Uses reusable workflow from hope0hermes/SharedWorkflows for consistent CI/CD across projects.
 #
-# Conventional Commit Format:
-# <type>(<scope>): <description>
+# Why this matters:
+# - Enables automated semantic versioning
+# - Generates meaningful CHANGELOGs automatically
+# - Makes git history more readable and searchable
 #
-# Valid types: feat, fix, docs, style, refactor, perf, test, chore, ci, build
+# Required format: <type>(<scope>): <subject>
+# - type: feat, fix, docs, style, refactor, test, chore
+# - scope: optional, e.g., "api", "ui", "parser"
+# - subject: short description in imperative mood
+#
 # Examples:
-# - feat: add heart rate zones
-# - fix: correct TSS calculation
-# - docs: update README
-# - chore: update dependencies
-#
-# To enable enforcement:
-# In GitHub, enable branch protection on main:
-# Settings → Branches → Add rule for main
-# Check "Require status checks to pass"
-# Select "Lint Commit Messages"
+#   feat: add batch processing support
+#   fix(parser): handle empty input correctly
+#   docs: update installation guide
+#   feat!: redesign Settings API (! indicates breaking change)
 
 name: Lint Commit Messages
 
 on:
   pull_request:
     branches: [ main ]
-    types: [ opened, synchronize, reopened, edited ]
 
 jobs:
   commitlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Validate PR title
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # Check if PR title follows conventional commit format
-          if ! echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)(\(.+\))?!?:.+"; then
-            echo "❌ PR title must follow Conventional Commits format"
-            echo ""
-            echo "Valid format: <type>(<scope>): <description>"
-            echo ""
-            echo "Valid types:"
-            echo "  feat:     New feature"
-            echo "  fix:      Bug fix"
-            echo "  docs:     Documentation changes"
-            echo "  style:    Code formatting (no logic change)"
-            echo "  refactor: Code refactoring"
-            echo "  perf:     Performance improvements"
-            echo "  test:     Adding or updating tests"
-            echo "  chore:    Maintenance tasks"
-            echo "  ci:       CI/CD changes"
-            echo "  build:    Build system changes"
-            echo ""
-            echo "Examples:"
-            echo "  ✓ feat: add heart rate zones"
-            echo "  ✓ fix: correct TSS calculation"
-            echo "  ✓ docs: update README with examples"
-            echo ""
-            echo "Your PR title: '$PR_TITLE'"
-            exit 1
-          fi
-          echo "✓ PR title follows Conventional Commits format"
-
-      - name: Validate commit messages
-        run: |
-          # Get all commits in the PR (excluding merge commits)
-          COMMITS=$(git log origin/main..HEAD --no-merges --pretty=format:"%s")
-
-          echo "Checking commit messages..."
-          echo ""
-
-          # Check each commit
-          INVALID_COUNT=0
-          while IFS= read -r commit_msg; do
-            # Skip empty lines
-            [ -z "$commit_msg" ] && continue
-
-            if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)(\(.+\))?!?:.+"; then
-              echo "❌ Invalid: $commit_msg"
-              INVALID_COUNT=$((INVALID_COUNT + 1))
-            else
-              echo "✓ Valid: $commit_msg"
-            fi
-          done <<< "$COMMITS"
-
-          if [ $INVALID_COUNT -gt 0 ]; then
-            echo ""
-            echo "Found $INVALID_COUNT invalid commit message(s)"
-            echo ""
-            echo "Please squash or amend commits to follow Conventional Commits format"
-            exit 1
-          fi
-
-          echo ""
-          echo "✓ All commit messages follow Conventional Commits format"
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-commitlint.yml@main
