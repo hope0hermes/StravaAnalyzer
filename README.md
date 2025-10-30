@@ -4,6 +4,7 @@ A comprehensive Python package for analyzing Strava activity data with scientifi
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-SharedWorkflows-brightgreen)](https://github.com/hope0hermes/SharedWorkflows)
 
 ## Why StravaAnalyzer?
 
@@ -601,6 +602,60 @@ pytest && ruff check . && mypy src/strava_analyzer
 - ✅ Time-weighted averaging for all metrics
 - ✅ Dual metric system (raw + moving)
 - ✅ Gap detection and handling
+- ✅ Comprehensive GitHub Actions CI/CD using [SharedWorkflows](https://github.com/hope0hermes/SharedWorkflows)
+
+> **Note**: This project uses [SharedWorkflows](https://github.com/hope0hermes/SharedWorkflows) for standardized CI/CD automation.
+> See [.github/SHAREDWORKFLOWS_MIGRATION.md](.github/SHAREDWORKFLOWS_MIGRATION.md) for migration details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! This project uses automated workflows for quality assurance.
+
+### Development Workflow
+
+1. **Fork and clone** the repository
+2. **Create a feature branch**: `git checkout -b feat/your-feature-name`
+3. **Make your changes** and ensure tests pass
+4. **Commit using Conventional Commits**:
+   - `feat:` for new features (triggers minor version bump)
+   - `fix:` for bug fixes (triggers patch version bump)
+   - `docs:` for documentation changes (no version bump)
+   - `chore:` for maintenance tasks (no version bump)
+5. **Push and create a Pull Request**
+
+### Automated CI/CD
+
+This project uses [SharedWorkflows](https://github.com/hope0hermes/SharedWorkflows) for:
+- ✅ **Automated Testing**: Linting and tests run on every PR
+- ✅ **Version Management**: Semantic versioning based on commit messages
+- ✅ **Release Automation**: Automatic GitHub releases and changelog updates
+- ✅ **Commit Validation**: Ensures Conventional Commits format
+
+All PRs require passing tests and proper commit message format.
+
+### Code Style
+
+This project uses:
+- **Ruff** for linting and formatting
+- **MyPy** for type checking
+- **Pytest** for testing
+
+Run quality checks:
+```bash
+# Format code
+ruff format .
+
+# Check for issues
+ruff check .
+
+# Type checking
+mypy src/strava_analyzer
+
+# Run all quality checks
+pytest && ruff check . && mypy src/strava_analyzer
+```
 
 ---
 
