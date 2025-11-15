@@ -1,0 +1,18 @@
+name: Publish to Devpi
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to Private Index
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-publish.yml@main
+    with:
+      registry: custom
+      custom-registry-url: ${{ secrets.DEVPI_URL }}
+      custom-registry-username: ${{ secrets.DEVPI_USERNAME }}
+      python-version: '3.12'
+    secrets:
+      PUBLISH_TOKEN: ${{ secrets.DEVPI_PASSWORD }}
