@@ -47,7 +47,6 @@ dev = [
     "pytest-cov>=6.0.0",
     "mypy>=1.14.1",
     "ruff>=0.9.1",
-    "pylint>=3.3.4"
 ]
 viz = [
     "jupyter>=1.1.1",
@@ -55,61 +54,13 @@ viz = [
     "folium>=0.14.0"
 ]
 
-[tool.hatch.metadata]
-
 [tool.hatch.version]
 path = "src/strava_analyzer/__init__.py"
 
-[tool.hatch.build]
-packages = ["src/strava_analyzer"]
-
-[tool.hatch.envs.default]
-dependencies = [
-    "pytest",
-    "mypy",
-    "ruff",
-    "pylint",
-]
-
-[tool.hatch.envs.test]
-dependencies = [
-    "pytest",
-    "pytest-cov",
-    "ruff",
-]
-[tool.hatch.envs.test.scripts]
-default = ["pytest {args}"]
-cov = ["pytest --cov=src/strava_analyzer --cov-report=term-missing --cov-report=xml --cov-report=html {args}"]
-
-[tool.hatch.envs.lint]
-dependencies = [
-    "ruff",
-    "mypy",
-    "pylint",
-    "pydocstyle",
-]
-[tool.hatch.envs.lint.scripts]
-default = [
-    "ruff check . {args}",
-    "ruff format --check . {args}",
-    "python -m mypy src/strava_analyzer {args}",
-    "pylint src/strava_analyzer {args}",
-    "pydocstyle src/strava_analyzer {args}",
-]
-check = "ruff check . {args}"
-format-check = "ruff format --check . {args}"
-mypy = "python -m mypy src/strava_analyzer {args}"
-[tool.hatch.envs.fmt]
-dependencies = [
-    "ruff",
-]
-[tool.hatch.envs.fmt.scripts]
-format = "ruff format . --verbose {args}"
-
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 88
-exclude = ["*.ipynb"]  # Add the exclusion for Jupyter notebooks
+exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4"]
@@ -122,23 +73,6 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
-
-# Configuration for Pylint
-[tool.pylint]
-# The 'messages control' subsection is where you disable warnings/errors.
-[tool.pylint.messages_control]
-disable = [
-    "W1203",  # 'logging-fstring-interpolation' warning globally
-    "W2301",  # Unnecessary ellipsis constant (unnecessary-ellipsis)
-    "R0903",  # Too few public methods
-    "R0914",  # Too many local variables (acceptable for complex calculations)
-    "R0915",  # Too many statements (acceptable for CLI commands)
-    "R0902",  # Too many instance attributes (acceptable for config classes)
-    "R0911",  # Too many return statements (acceptable for conversion functions)
-    "W0718",  # Broad exception caught (we re-raise with context)
-    "W0613",  # Unused argument (kept for interface compatibility)
-    "C0415",  # Import outside toplevel (used to avoid circular imports)
-]
 
 # Configuration for MyPy
 [tool.mypy]
