@@ -32,7 +32,14 @@ from .models import (
 from .pipeline import Pipeline
 from .services import ActivityService, AnalysisService
 
+
+def get_version() -> str:
+    """Get the current version of strava_analyzer."""
+    return __version__
+
 __all__ = [
+    # Version
+    "get_version",
     # Models
     "ActivityMetrics",
     "ActivityStream",
