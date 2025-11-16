@@ -11,8 +11,8 @@ jobs:
     uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-publish.yml@main
     with:
       registry: custom
+      custom-registry-url: ${{ secrets.DEVPI_URL }}
+      custom-registry-username: ${{ secrets.DEVPI_USERNAME }}
       python-version: '3.12'
     secrets:
       PUBLISH_TOKEN: ${{ secrets.DEVPI_PASSWORD }}
-      CUSTOM_REGISTRY_URL: ${{ secrets.DEVPI_URL }}
-      CUSTOM_REGISTRY_USERNAME: ${{ secrets.DEVPI_USERNAME }}
