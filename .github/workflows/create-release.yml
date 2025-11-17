@@ -1,16 +1,17 @@
-# Create Release Workflow
+# Auto-create GitHub Release
 #
 # This workflow automatically creates a GitHub Release after a version bump PR is merged.
+# It detects version bump commits and creates a release with the corresponding tag.
 # Uses reusable workflow from hope0hermes/SharedWorkflows for consistent CI/CD across projects.
 #
 # When it runs:
-# - Automatically: When a PR with "chore: bump version to X.Y.Z" is merged to main
+# - Automatically: When a PR is merged to main that contains a version bump commit
 #
 # What it does:
-# 1. Detects version bump commits (format: "chore: bump version to X.Y.Z")
+# 1. Detects if the merged commit is a version bump (starts with "chore: bump version")
 # 2. Extracts the version number from the commit message
-# 3. Creates a GitHub Release with that version tag
-# 4. Includes CHANGELOG content in the release notes
+# 3. Creates a git tag for the version
+# 4. Creates a GitHub Release with the tag and CHANGELOG excerpt
 
 name: Create Release
 
@@ -21,3 +22,5 @@ on:
 jobs:
   create-release:
     uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-create-release.yml@main
+    secrets:
+      github-token: ${{ secrets.PAT_TOKEN }}
