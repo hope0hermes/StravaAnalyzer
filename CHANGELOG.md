@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-11-17
+
+### Changed
+- feat: add get_package_info() function (#24)
+- fix: use env vars to pass secrets to workflow inputs (#22)
+- feat: add get_version() helper function (#20)
+- chore: migrate to UV and add Devpi publishing (#19)
+- chore: migrate to UV and add Devpi publishing (#18)
+
+
 ## [1.1.0] - 2025-10-30
 
 ### Changed
