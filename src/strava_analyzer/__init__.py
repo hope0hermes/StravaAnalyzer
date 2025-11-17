@@ -37,9 +37,20 @@ def get_version() -> str:
     """Get the current version of strava_analyzer."""
     return __version__
 
+
+def get_package_info() -> dict[str, str]:
+    """Get package information including name and version."""
+    return {
+        "name": "strava-analyzer",
+        "version": __version__,
+        "description": "A package for analyzing Strava activity data",
+    }
+
+
 __all__ = [
-    # Version
+    # Version & Info
     "get_version",
+    "get_package_info",
     # Models
     "ActivityMetrics",
     "ActivityStream",
