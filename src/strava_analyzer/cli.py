@@ -12,13 +12,32 @@ from pathlib import Path
 
 import click
 import pandas as pd
-from click import Context
+from click import Context, Group
 
 from .analysis import ActivitySummarizer
 from .constants import CSVConstants
 from .exceptions import StravaAnalyzerError
 from .pipeline import Pipeline
 from .settings import load_settings
+
+
+# Custom command class to show full help text
+class CustomGroup(Group):
+    """Custom Click group that shows full command help without truncation."""
+
+    def format_commands(self, ctx, formatter):
+        """Format commands with full descriptions."""
+        commands = []
+        for subcommand in self.list_commands(ctx):
+            cmd = self.get_command(ctx, subcommand)
+            if cmd is None:
+                continue
+            help_text = cmd.get_short_help_str(limit=999)
+            commands.append((subcommand, help_text))
+
+        if commands:
+            with formatter.section("Commands"):
+                formatter.write_dl(commands)
 
 
 # Configure basic logging
@@ -30,13 +49,11 @@ def configure_logging(verbose: bool = False) -> None:
     )
 
 
-@click.group()
+@click.group(cls=CustomGroup, context_settings={"help_option_names": ["-h", "--help"]})
 def main():
-    """
-    Analyze Strava activity data and calculate performance metrics.
+    """Analyze Strava activity data and calculate performance metrics.
 
-    This tool processes Strava activity data, calculates various performance
-    metrics, and generates enriched activity data and summary statistics.
+    Quick start: strava-analyzer process --config config.yaml
     """
 
 
@@ -74,10 +91,7 @@ def run(
     force: bool,
 ) -> None:
     """
-    Process Strava activities and calculate metrics.
-
-    This command loads activity data and stream files, calculates various
-    performance metrics, and saves the enriched data to CSV files.
+    STEP 1: Calculate per-activity metrics (power, HR, efficiency, zones, TSS).
     """
     configure_logging(verbose)
     logger = logging.getLogger(__name__)
@@ -151,10 +165,7 @@ def summarize(
     to_date: datetime | None,
 ) -> None:
     """
-    Generate summary statistics from processed activities.
-
-    This command reads the enriched activity data and generates various
-    summary statistics and longitudinal metrics.
+    STEP 2: Generate longitudinal metrics (ATL, CTL, TSB, ACWR, trends).
     """
     logger = logging.getLogger(__name__)
 
@@ -285,10 +296,7 @@ def process(
     force: bool,
 ) -> None:
     """
-    Process activities and generate summary in one step.
-
-    This command combines 'run' and 'summarize' - it processes all activities
-    and immediately generates a summary report.
+    ALL-IN-ONE: Process activities and generate summary (combines run + summarize).
     """
     configure_logging(verbose)
     logger = logging.getLogger(__name__)
@@ -325,10 +333,7 @@ def process(
 @click.argument("activity_id", type=str)
 def analyze(config: Path | None, activity_id: str) -> None:
     """
-    Analyze a single activity in detail.
-
-    This command performs detailed analysis of a single activity and
-    displays comprehensive metrics.
+    DETAILED VIEW: Show all metrics for a single activity.
     """
     logger = logging.getLogger(__name__)
 
