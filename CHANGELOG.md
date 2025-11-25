@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-11-25
+
+### Changed
+- feat: integrate missing metrics into enrichment pipeline (#28)
+- docs: improve CLI help and reorganize documentation (#27)
+- chore: sync workflows and make publish manual-only (#26)
+
+
 ## [1.2.0] - 2025-11-17
 
 ### Changed
