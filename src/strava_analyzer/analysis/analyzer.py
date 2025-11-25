@@ -23,7 +23,7 @@ class AnalyzerProtocol(Protocol):
 
     def analyze(
         self, activity_row: pd.Series, stream_df: pd.DataFrame
-    ) -> dict[str, float]:
+    ) -> dict[str, float | str]:
         """Analyze an activity and return metrics."""
         ...
 
@@ -48,7 +48,7 @@ class ActivityAnalyzer:
 
     def analyze(
         self, activity_row: pd.Series, stream_df: pd.DataFrame
-    ) -> dict[str, float]:
+    ) -> dict[str, float | str]:
         """
         Analyze a single activity and compute all metrics.
 
@@ -95,7 +95,9 @@ class ActivityAnalyzer:
                 f"Error analyzing activity {activity_row['id']}: {e}"
             ) from e
 
-    def _convert_numpy_types(self, metrics: dict) -> dict:
+    def _convert_numpy_types(
+        self, metrics: dict[str, float | str]
+    ) -> dict[str, float | str]:
         """
         Convert numpy types to Python native types.
 

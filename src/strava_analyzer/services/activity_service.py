@@ -54,7 +54,7 @@ class ActivityService:
 
     def process_activity(
         self, activity_row: pd.Series
-    ) -> tuple[dict[str, float], pd.DataFrame]:
+    ) -> tuple[dict[str, float | str], pd.DataFrame]:
         """
         Process a single activity through the complete pipeline.
 
@@ -102,6 +102,15 @@ class ActivityService:
                 f"Failed to process activity {activity_id}: {e}"
             ) from e
 
+    def get_all_activities(self) -> pd.DataFrame:
+        """
+        Get all activities.
+
+        Returns:
+            DataFrame of all activities
+        """
+        return self.repository.get_all_activities()
+
     def get_activities_to_process(self) -> pd.DataFrame:
         """
         Get activities that need processing.
@@ -146,3 +155,22 @@ class ActivityService:
             DataFrame of recent activities
         """
         return self.repository.get_recent_activities(n)
+
+    def get_activity_stream(self, activity_id: int | str) -> pd.DataFrame:
+        """
+        Get processed stream for an activity.
+
+        Args:
+            activity_id: ID of the activity
+
+        Returns:
+            DataFrame of processed stream data
+        """
+        try:
+            raw_stream = self.loader.load_stream(activity_id)
+            if raw_stream.empty:
+                return pd.DataFrame()
+            return self.processor.process(raw_stream)
+        except Exception as e:
+            self.logger.error(f"Error loading stream for {activity_id}: {e}")
+            return pd.DataFrame()

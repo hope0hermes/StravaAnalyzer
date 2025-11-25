@@ -1965,6 +1965,13 @@ viz = [
     { name = "plotly" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
@@ -1983,6 +1990,13 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.7.0" },
 ]
 provides-extras = ["dev", "viz"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.18.2" },
+    { name = "pytest", specifier = ">=9.0.1" },
+    { name = "ruff", specifier = ">=0.14.5" },
+]
 
 [[package]]
 name = "terminado"
