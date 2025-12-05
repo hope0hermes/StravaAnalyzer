@@ -10,9 +10,12 @@ This package contains all metric calculation logic, organized by type:
 - zones: Zone distribution calculations
 - tid: Training Intensity Distribution analysis
 - fatigue: Fatigue resistance and power decay metrics
+- basic: Basic aggregated metrics (cadence, speed)
+- zone_edges: Zone edges tracking and backpropagation
 - calculators: High-level calculator orchestrators
 """
 
+from .basic import BasicMetricsCalculator
 from .calculators import MetricsCalculator
 from .efficiency import EfficiencyCalculator
 from .fatigue import FatigueCalculator
@@ -26,6 +29,7 @@ from .power_curve import (
     interval_name_from_seconds,
 )
 from .tid import TIDCalculator
+from .zone_edges import ZoneEdgesManager
 from .zones import ZoneCalculator
 
 __all__ = [
@@ -37,6 +41,8 @@ __all__ = [
     "ZoneCalculator",
     "TIDCalculator",
     "FatigueCalculator",
+    "BasicMetricsCalculator",
+    "ZoneEdgesManager",
     "estimate_cp_wprime",
     "extract_mmp_data",
     "hyperbolic_model",

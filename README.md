@@ -77,8 +77,15 @@ pipeline.run()
 - **Running**: NGP, rTSS, hrTSS, Functional Threshold Pace
 - **All Sports**: HR analysis, elevation, distance
 
+### Power Profile (Rolling 90-Day Window)
+- **Critical Power Model**: CP and W' (anaerobic capacity) with R² model fit
+- **Anaerobic Energy Index**: AEI = W'/body_weight (J/kg) for power endurance
+- **Power Curve**: Maximum mean power at 5s-1hr durations
+- **Dynamic Tracking**: CP/W'/AEI update as new peak efforts enter the window
+
 ### Longitudinal Analysis
 - **Training Load**: ATL (7d fatigue), CTL (42d fitness), TSB (readiness), ACWR (injury risk)
+- **Per-Activity Training State**: Each activity has its own CTL/ATL/TSB/ACWR based on time-weighted decay
 - **Trends**: Rolling averages, performance curves, zone patterns
 - **Estimation**: Dynamic FTP/FTHR from activities
 

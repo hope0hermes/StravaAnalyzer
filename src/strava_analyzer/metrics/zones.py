@@ -2,8 +2,8 @@
 Zone distribution calculations.
 
 This module handles time-in-zone calculations for:
-- Power zones (7-zone Coggan model)
-- Heart rate zones (5-zone model)
+- Power zones (7-zone model from settings, LT-based or Coggan percentage-based)
+- Heart rate zones (5-zone model from settings, LT-based or percentage-based)
 - Cadence zones
 
 Also provides utility functions for binning features and calculating power profiles.
@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
-from ..constants import HeartRateZoneThresholds, PowerZoneThresholds
 from ..exceptions import MetricCalculationError, ValidationError
 from ..models import MaximumMeanPowers, PowerProfile
 from ..settings import Settings
@@ -59,76 +58,52 @@ class ZoneCalculator(BaseMetricCalculator):
         return metrics
 
     def _calculate_power_zones(self, power_series: pd.Series) -> dict[str, float]:
-        """Calculate power zone distribution (Coggan 7-zone model)."""
-        ftp = self.settings.ftp
+        """Calculate power zone distribution using zones from settings.
+
+        Uses the power zones defined in settings, which can be:
+        - LT-based 7-zone model (if lt1_power and lt2_power are configured)
+        - Coggan percentage-based 7-zone model (fallback)
+        """
         total_points = len(power_series)
 
         if total_points == 0:
             return {}
 
-        zones = {
-            "power_z1": (0, PowerZoneThresholds.ZONE_1_MAX * ftp),
-            "power_z2": (
-                PowerZoneThresholds.ZONE_1_MAX * ftp,
-                PowerZoneThresholds.ZONE_2_MAX * ftp,
-            ),
-            "power_z3": (
-                PowerZoneThresholds.ZONE_2_MAX * ftp,
-                PowerZoneThresholds.ZONE_3_MAX * ftp,
-            ),
-            "power_z4": (
-                PowerZoneThresholds.ZONE_3_MAX * ftp,
-                PowerZoneThresholds.ZONE_4_MAX * ftp,
-            ),
-            "power_z5": (
-                PowerZoneThresholds.ZONE_4_MAX * ftp,
-                PowerZoneThresholds.ZONE_5_MAX * ftp,
-            ),
-            "power_z6": (
-                PowerZoneThresholds.ZONE_5_MAX * ftp,
-                PowerZoneThresholds.ZONE_6_MAX * ftp,
-            ),
-            "power_z7": (PowerZoneThresholds.ZONE_6_MAX * ftp, float("inf")),
-        }
+        # Use zones from settings (LT-based or percentage-based)
+        zones = self.settings.power_zones
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
+            # Convert zone name from settings format (power_zone_1) to output format (power_z1)
+            output_name = zone_name.replace("power_zone_", "power_z")
             mask = (power_series >= lower) & (power_series < upper)
             time_in_zone = mask.sum()
-            zone_percentages[zone_name] = (time_in_zone / total_points) * 100
+            zone_percentages[output_name] = (time_in_zone / total_points) * 100
 
         return zone_percentages
 
     def _calculate_hr_zones(self, hr_series: pd.Series) -> dict[str, float]:
-        """Calculate HR zone distribution (5-zone model)."""
-        fthr = self.settings.fthr
+        """Calculate HR zone distribution using zones from settings.
+
+        Uses the HR zones defined in settings, which can be:
+        - LT-based 5-zone model (if lt1_hr and lt2_hr are configured)
+        - Percentage-based 5-zone model (fallback)
+        """
         total_points = len(hr_series)
 
         if total_points == 0:
             return {}
 
-        zones = {
-            "hr_z1": (0, HeartRateZoneThresholds.ZONE_1_MAX * fthr),
-            "hr_z2": (
-                HeartRateZoneThresholds.ZONE_1_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_2_MAX * fthr,
-            ),
-            "hr_z3": (
-                HeartRateZoneThresholds.ZONE_2_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_3_MAX * fthr,
-            ),
-            "hr_z4": (
-                HeartRateZoneThresholds.ZONE_3_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_4_MAX * fthr,
-            ),
-            "hr_z5": (HeartRateZoneThresholds.ZONE_4_MAX * fthr, float("inf")),
-        }
+        # Use zones from settings (LT-based or percentage-based)
+        zones = self.settings.hr_zone_ranges
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
+            # Convert zone name from settings format (hr_zone_1) to output format (hr_z1)
+            output_name = zone_name.replace("hr_zone_", "hr_z")
             mask = (hr_series >= lower) & (hr_series < upper)
             time_in_zone = mask.sum()
-            zone_percentages[zone_name] = (time_in_zone / total_points) * 100
+            zone_percentages[output_name] = (time_in_zone / total_points) * 100
 
         return zone_percentages
 

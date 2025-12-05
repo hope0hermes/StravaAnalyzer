@@ -341,6 +341,197 @@ These metrics quantify an athlete's ability to sustain power output over time, i
 
 ---
 
+## Training Load Metrics
+
+Training load metrics quantify cumulative training stress over time, helping coaches and athletes optimize training plans while managing injury risk.
+
+### Time-Weighted Training Decay
+
+Unlike simple daily TSS summation, StravaAnalyzer uses **exponential decay** based on actual calendar days:
+
+```
+decay_factor = exp(-days_elapsed / time_constant)
+```
+
+Where:
+- `days_elapsed`: Actual calendar days between activities
+- `time_constant`: CTL uses 42 days, ATL uses 7 days
+- Result: Activities older than the time constant fade exponentially
+
+**Why this matters:**
+- Accounts for natural fitness decay when not training
+- Gaps in training don't create artificial spikes
+- More physiologically accurate than simple moving averages
+- Each activity's time-of-day doesn't matter, only the calendar date
+
+### Chronic Training Load (CTL)
+
+- **Metric**: `chronic_training_load`
+- **Time Constant**: 42 days
+- **Description**: Cumulative training load representing fitness level
+- **Calculation**: Time-weighted exponential average of daily TSS over 42 days
+- **Variants**: `raw_` and `moving_` versions in longitudinal summary
+- **Interpretation**:
+  - **Low (< 50)**: Detraining, recovery phase
+  - **Moderate (50-100)**: Base fitness, sustainable long-term training
+  - **High (> 100)**: Peak fitness, may indicate overtraining risk if combined with high ATL
+
+### Acute Training Load (ATL)
+
+- **Metric**: `acute_training_load`
+- **Time Constant**: 7 days
+- **Description**: Recent training stress representing fatigue level
+- **Calculation**: Time-weighted exponential average of daily TSS over 7 days
+- **Variants**: `raw_` and `moving_` versions in longitudinal summary
+- **Interpretation**:
+  - **Low (< 30)**: Well recovered
+  - **Moderate (30-60)**: Normal fatigue from recent training
+  - **High (> 60)**: Significant fatigue, may need recovery
+
+### Training Stress Balance (TSB)
+
+- **Metric**: `training_stress_balance`
+- **Formula**: `TSB = CTL - ATL`
+- **Description**: Instantaneous indicator of training readiness
+- **Variants**: `raw_` and `moving_` versions in longitudinal summary
+- **Interpretation**:
+  - **> 15**: Fresh and ready for hard efforts (positive TSB)
+  - **(-10) to 15**: Productive training zone
+  - **(-30) to (-10)**: Fatigued but productive
+  - **< -30**: Highly fatigued, needs recovery
+- **Optimal Range**: -30 to -10 for peak performance (slight fatigue with high fitness)
+
+### Acute:Chronic Workload Ratio (ACWR)
+
+- **Metric**: `acwr`
+- **Formula**: `ACWR = ATL / CTL` (or 0 if CTL is 0)
+- **Description**: Ratio of recent stress to overall fitness, key injury risk indicator
+- **Variants**: `raw_` and `moving_` versions in longitudinal summary
+- **Interpretation**:
+  - **< 0.8**: Undertraining, insufficient stimulus
+  - **0.8-1.0**: Sweet spot for injury prevention and adaptation
+  - **1.0-1.3**: Elevated injury risk, but acceptable with gradual progression
+  - **> 1.3**: High injury risk, rapid load increase not tolerated
+  - **> 1.5**: Severe overtraining risk
+
+### Training Status
+
+- **Method**: Automatic classification based on TSB and ACWR
+- **Possible States**:
+  - **Fresh - Ready for Performance**: High CTL, low ATL, positive TSB
+  - **Productive Training**: Optimal fatigue-to-fitness ratio
+  - **High Fatigue - Recovery Needed**: Low TSB (< -30)
+  - **Undertraining**: Low ACWR (< 0.8)
+  - **High Risk - Reduce Load**: High ACWR (> 1.3)
+  - **Maintenance**: Stable state with balanced load
+
+### Per-Activity Training Load State
+
+**Important:** Each activity record in the enriched CSV includes its own `chronic_training_load`, `acute_training_load`, `training_stress_balance`, and `acwr` values representing the training state **as of that activity's date**.
+
+- **Computation**: Based on all activities up to and including that date
+- **Window**: Uses actual calendar days (not row-based)
+- **Stability**: Same TSB across multiple activities on the same day
+- **Decay**: Activities older than 42 days have minimal CTL contribution
+
+**Example:**
+```
+Activity 1: 2025-01-01, CTL=50, ATL=40, TSB=+10
+Activity 2: 2025-01-02, CTL=51, ATL=38, TSB=+13  (newer activity, ATL decayed 1 day)
+Activity 3: 2025-02-20, CTL=52, ATL=35, TSB=+17  (50 days later, ATL decayed significantly)
+```
+
+---
+
+## Power Profile Metrics (Rolling 90-Day Window)
+
+Critical Power (CP) and W' (W-prime) model the power-duration relationship, enabling predictions of time-to-exhaustion and power capabilities.
+
+### Critical Power (CP)
+
+- **Metric**: `cp`
+- **Units**: Watts (W)
+- **Description**: Estimate of the maximum power an athlete can sustain indefinitely
+- **Calculation**: Hyperbolic model fit to maximum mean powers over 90 calendar days: `P(t) = CP + W'/t`
+- **Variants**: Both `raw_` and `moving_` versions available
+- **Window**: 90-day rolling lookback (calendar days, not row count)
+- **Update**: Recalculated each activity; changes when new peak efforts enter or old ones exit window
+- **Interpretation**:
+  - **Typical values**: 200-400W for trained cyclists
+  - **Temporal changes**: Rising CP indicates improving fitness; declining CP indicates detraining
+  - **Stability**: Remains constant if no new records are established in the window
+
+### W' (Anaerobic Work Capacity)
+
+- **Metric**: `w_prime`
+- **Units**: Joules (J)
+- **Description**: Finite work capacity above critical power; energy available for anaerobic efforts
+- **Calculation**: Fitted from hyperbolic model to maximum mean powers
+- **Variants**: Both `raw_` and `moving_` versions available
+- **Window**: 90-day rolling lookback
+- **Interpretation**:
+  - **Typical values**: 1000-3000J for trained cyclists
+  - **Physiological meaning**: Energy available from anaerobic metabolism before exhaustion
+  - **Fatigue indicator**: Declining W' despite stable CP may indicate overtraining
+
+### CP Model Fit Quality
+
+- **Metric**: `cp_r_squared`
+- **Range**: 0.0 to 1.0
+- **Description**: R² (coefficient of determination) of the power-duration curve fit
+- **Interpretation**:
+  - **> 0.9**: Excellent fit, reliable CP estimate
+  - **0.75-0.9**: Good fit, usable CP estimate
+  - **0.6-0.75**: Moderate fit, caution advised
+  - **< 0.6**: Poor fit, may indicate insufficient data quality or irregular power distribution
+
+### Anaerobic Energy Index (AEI)
+
+- **Metric**: `aei`
+- **Units**: Joules per kilogram (J/kg)
+- **Formula**: `AEI = W' / body_weight_kg`
+- **Description**: Normalized anaerobic capacity, accounting for athlete body weight
+- **Variants**: Both `raw_` and `moving_` versions available
+- **Requires**: `rider_weight_kg` in configuration
+- **Interpretation**:
+  - **Typical values**: 15-35 J/kg for trained cyclists
+  - **Weight comparison**: Allows fair comparison between athletes of different sizes
+  - **Advantages**: AEI is more stable than absolute W' when tracking body composition changes
+  - **Normalization**: Similar to power-to-weight (W/kg) but for anaerobic capacity
+
+### Power Curve (Maximum Mean Powers)
+
+- **Metrics**: `power_curve_5sec`, `power_curve_10sec`, ..., `power_curve_1hr`
+- **Description**: Maximum mean power sustained for each duration
+- **Durations**: 5s, 10s, 15s, 20s, 30s, 1min, 2min, 5min, 10min, 15min, 20min, 30min, 1hr
+- **Calculation**: Rolling maximum across all activities in the entire training history
+- **Note**: These are **all-time** bests, not limited to 90-day window (unlike CP/W')
+- **Interpretation**: Shows power profile shape and identifies weaknesses
+  - **Weak 5min power**: May need more VO2max work
+  - **Weak 1hr power**: May need FTP/threshold work
+
+### CP Model Confidence
+
+When fewer than 3 power-duration data points are available (e.g., very new athletes or limited power data), CP values will be `NaN` (not computed). This ensures reliability:
+
+- **Need**: At least 3 different duration points with valid power data
+- **Why**: Hyperbolic model requires minimum 3 points for meaningful fitting
+- **Result**: Activities with `cp=NaN` still have other metrics; CP will populate once 90-day window accumulates enough data
+
+### 90-Day Window Details
+
+- **Type**: Calendar-day based, not row-based
+- **Lookback**: Each activity looks back exactly 90 calendar days
+- **Boundary**: Includes all activities from (activity_date - 90 days) to activity_date (inclusive)
+- **Update Frequency**: Recalculated per activity; different activities on same day may have same CP if no new records
+- **Staleness**: Activities older than 90 days have zero contribution to CP
+- **Benefits**:
+  - Captures current fitness level, not lifetime bests
+  - Properly handles off-seasons with minimal distortion
+  - Physiologically appropriate for tracking adaptations
+
+---
+
 ## Configuration and Constants
 
 All thresholds, zone boundaries, and calculation parameters are defined in `src/strava_analyzer/constants.py` for easy customization:
@@ -355,8 +546,9 @@ All thresholds, zone boundaries, and calculation parameters are defined in `src/
 - **Training Load Windows**:
   - ATL: 7 days
   - CTL: 42 days
-- **Power Zones**: Coggan 7-zone model (percentages of FTP)
-- **Heart Rate Zones**: 5-zone model (percentages of FTHR)
+  - CP Window: 90 days (90-day rolling window for Critical Power modeling)
+- **Power Zones**: Coggan 7-zone model (percentages of FTP) or LT-based model if stress test thresholds provided
+- **Heart Rate Zones**: 5-zone model (percentages of FTHR) or LT-based model if stress test thresholds provided
 - **Validation Thresholds**: Min/max values for power, HR, cadence, velocity
 
 For complete details, see `src/strava_analyzer/constants.py` and `docs/ADR_005_TIME_WEIGHTED_AVERAGING.md`.

@@ -69,10 +69,10 @@ def estimate_cp_wprime(mmp_data: list[tuple[int, float]]) -> dict[str, float]:
         mmp_data: List of (duration, power) tuples
 
     Returns:
-        Dictionary with 'cp' and 'w_prime' keys
+        Dictionary with 'cp', 'w_prime', and 'r_squared' keys
     """
     if len(mmp_data) < 2:  # Need at least two points to fit a curve
-        return {"cp": np.nan, "w_prime": np.nan}
+        return {"cp": np.nan, "w_prime": np.nan, "r_squared": np.nan}
 
     durations = np.array([d for d, p in mmp_data])
     powers = np.array([p for d, p in mmp_data])
@@ -94,7 +94,7 @@ def estimate_cp_wprime(mmp_data: list[tuple[int, float]]) -> dict[str, float]:
     try:
         # Fit the curve
         # pylint: disable=unbalanced-tuple-unpacking
-        popt, _ = curve_fit(
+        popt, pcov = curve_fit(
             hyperbolic_model,
             durations,
             powers,
@@ -102,13 +102,20 @@ def estimate_cp_wprime(mmp_data: list[tuple[int, float]]) -> dict[str, float]:
             bounds=([0, 0], [np.inf, np.inf]),
         )  # Bounds to ensure positive CP and W'
         cp_estimate, w_prime_estimate = popt
-        return {"cp": cp_estimate, "w_prime": w_prime_estimate}
+        
+        # Calculate R-squared (coefficient of determination)
+        predicted = hyperbolic_model(durations, cp_estimate, w_prime_estimate)
+        ss_res = np.sum((powers - predicted) ** 2)
+        ss_tot = np.sum((powers - np.mean(powers)) ** 2)
+        r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else np.nan
+        
+        return {"cp": cp_estimate, "w_prime": w_prime_estimate, "r_squared": r_squared}
     except RuntimeError as e:
         print(f"Error fitting CP/W' model: {e}")
-        return {"cp": np.nan, "w_prime": np.nan}
+        return {"cp": np.nan, "w_prime": np.nan, "r_squared": np.nan}
     except ValueError as e:
         print(f"Value error in CP/W' model fitting: {e}")
-        return {"cp": np.nan, "w_prime": np.nan}
+        return {"cp": np.nan, "w_prime": np.nan, "r_squared": np.nan}
 
 
 def interval_name_from_seconds(seconds: int) -> str:

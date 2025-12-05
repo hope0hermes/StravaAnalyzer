@@ -50,9 +50,16 @@ class ActivitySummarizer:
         if as_of_date is None:
             as_of_date = pd.Timestamp.now()
 
+        # Ensure start_date is datetime for comparison
+        df = activities_df.copy()
+        if "start_date" not in df.columns and "start_date_local" in df.columns:
+            df["start_date"] = pd.to_datetime(df["start_date_local"])
+        elif "start_date" in df.columns:
+            df["start_date"] = pd.to_datetime(df["start_date"])
+
         # Filter activities up to as_of_date
-        mask = activities_df["start_date"] <= as_of_date
-        df = activities_df[mask].copy()
+        mask = df["start_date"] <= as_of_date
+        df = df[mask].copy()
 
         # Use moving TSS if available, otherwise fall back to raw TSS
         tss_column = (
@@ -60,7 +67,7 @@ class ActivitySummarizer:
             if "moving_training_stress_score" in df.columns
             else "raw_training_stress_score"
         )
-        if tss_column not in df.columns:
+        if tss_column not in df.columns or df[tss_column].isna().all():
             return TrainingLoadSummary(
                 chronic_training_load=0.0,
                 acute_training_load=0.0,
@@ -68,19 +75,25 @@ class ActivitySummarizer:
                 acwr=0.0,
             )
 
-        # Calculate CTL (42-day exponential average)
-        df["ctl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.CTL_DAYS).mean()
+        # Sort by date ASCENDING (oldest first) for proper EWM calculation
+        df = df.sort_values("start_date", ascending=True).reset_index(drop=True)
+        
+        # Fill NaN TSS values with 0 for EWM calculation
+        df[tss_column] = df[tss_column].fillna(0)
 
-        # Calculate ATL (7-day exponential average)
-        df["atl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.ATL_DAYS).mean()
+        # Calculate CTL (chronic training load - 42-day exponential average)
+        df["ctl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.CTL_DAYS, adjust=False).mean()
 
-        # Get most recent values
+        # Calculate ATL (acute training load - 7-day exponential average)
+        df["atl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.ATL_DAYS, adjust=False).mean()
+
+        # Get most recent values (last row after ascending sort)
         if len(df) > 0:
             latest = df.iloc[-1]
-            ctl = latest["ctl_score"]
-            atl = latest["atl_score"]
+            ctl = float(latest["ctl_score"])
+            atl = float(latest["atl_score"])
             tsb = ctl - atl
-            acwr = atl / ctl if ctl > 0 else 0
+            acwr = atl / ctl if ctl > 0 else 0.0
         else:
             ctl = atl = tsb = acwr = 0.0
 

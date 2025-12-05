@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from ..settings import Settings
+from .basic import BasicMetricsCalculator
 from .efficiency import EfficiencyCalculator
 from .fatigue import FatigueCalculator
 from .heartrate import HeartRateCalculator
@@ -46,6 +47,7 @@ class MetricsCalculator:
         self.zone_calculator = ZoneCalculator(settings)
         self.tid_calculator = TIDCalculator(settings)
         self.fatigue_calculator = FatigueCalculator(settings)
+        self.basic_calculator = BasicMetricsCalculator(settings)
 
     def compute_all_metrics(
         self,
@@ -112,6 +114,10 @@ class MetricsCalculator:
                         stream_df, moving_only
                     )
                     all_metrics.update(pace_metrics)
+
+                # Basic metrics (cadence, speed)
+                basic_metrics = self.basic_calculator.calculate(stream_df, moving_only)
+                all_metrics.update(basic_metrics)
 
                 # Zone distributions
                 zone_metrics = self.zone_calculator.calculate(stream_df, moving_only)
