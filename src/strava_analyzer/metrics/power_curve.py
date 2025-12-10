@@ -102,13 +102,13 @@ def estimate_cp_wprime(mmp_data: list[tuple[int, float]]) -> dict[str, float]:
             bounds=([0, 0], [np.inf, np.inf]),
         )  # Bounds to ensure positive CP and W'
         cp_estimate, w_prime_estimate = popt
-        
+
         # Calculate R-squared (coefficient of determination)
         predicted = hyperbolic_model(durations, cp_estimate, w_prime_estimate)
         ss_res = np.sum((powers - predicted) ** 2)
         ss_tot = np.sum((powers - np.mean(powers)) ** 2)
         r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else np.nan
-        
+
         return {"cp": cp_estimate, "w_prime": w_prime_estimate, "r_squared": r_squared}
     except RuntimeError as e:
         print(f"Error fitting CP/W' model: {e}")

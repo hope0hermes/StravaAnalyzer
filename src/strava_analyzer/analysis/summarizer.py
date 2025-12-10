@@ -77,7 +77,7 @@ class ActivitySummarizer:
 
         # Sort by date ASCENDING (oldest first) for proper EWM calculation
         df = df.sort_values("start_date", ascending=True).reset_index(drop=True)
-        
+
         # Fill NaN TSS values with 0 for EWM calculation
         df[tss_column] = df[tss_column].fillna(0)
 

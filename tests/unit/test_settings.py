@@ -169,7 +169,7 @@ class TestSettingsZoneConfiguration:
         settings = Settings(ftp=285)
 
         assert "power_zone_1" in settings.power_zones
-        assert "power_zone_6" in settings.power_zones
+        assert "power_zone_7" in settings.power_zones
         assert settings.power_zones["power_zone_1"] == (0, 157)
 
     def test_default_hr_zones_loaded(self):

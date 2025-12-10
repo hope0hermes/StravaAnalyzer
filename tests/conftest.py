@@ -42,11 +42,12 @@ def sample_config_dict() -> dict:
         "processed_data_dir": "processed_data",
         "power_zones": {
             "power_zone_1": [0, 157],
-            "power_zone_2": [158, 214],
-            "power_zone_3": [215, 256],
-            "power_zone_4": [257, 300],
-            "power_zone_5": [301, 342],
-            "power_zone_6": [343, 9999],
+            "power_zone_2": [157, 214],
+            "power_zone_3": [214, 256],
+            "power_zone_4": [256, 299],
+            "power_zone_5": [299, 342],
+            "power_zone_6": [342, 427],
+            "power_zone_7": [427, 9999],
         },
         "hr_zone_ranges": {
             "hr_zone_1": [39, 110],
