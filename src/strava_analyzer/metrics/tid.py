@@ -5,6 +5,9 @@ This module provides comprehensive TID metrics including:
 - Time-in-zone distributions
 - Polarization analysis
 - TID ratios for various zone models
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -26,33 +29,26 @@ class TIDCalculator(BaseMetricCalculator):
     polarization analysis and zone distribution ratios.
     """
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate TID metrics.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of TID metrics with appropriate prefix
+            Dictionary of TID metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
-        metrics = {}
+        metrics: dict[str, float] = {}
 
         # Calculate TID metrics based on available data
-        if "watts" in df.columns and self.settings.ftp > 0:
-            power_tid = self._calculate_power_tid(df["watts"])
-            for key, value in power_tid.items():
-                metrics[f"{prefix}{key}"] = value
+        if "watts" in stream_df.columns and self.settings.ftp > 0:
+            power_tid = self._calculate_power_tid(stream_df["watts"])
+            metrics.update(power_tid)
 
-        if "heartrate" in df.columns and self.settings.fthr > 0:
-            hr_tid = self._calculate_hr_tid(df["heartrate"])
-            for key, value in hr_tid.items():
-                metrics[f"{prefix}{key}"] = value
+        if "heartrate" in stream_df.columns and self.settings.fthr > 0:
+            hr_tid = self._calculate_hr_tid(stream_df["heartrate"])
+            metrics.update(hr_tid)
 
         return metrics
 
@@ -189,28 +185,30 @@ class TIDCalculator(BaseMetricCalculator):
         return "threshold"
 
     def calculate_weekly_tid(
-        self, activities_df: pd.DataFrame, metric_prefix: str = "raw_"
+        self, activities_df: pd.DataFrame
     ) -> dict[str, float]:
         """
         Calculate weekly TID from multiple activities.
 
+        NOTE: Data is expected to be from a single mode (raw OR moving).
+        Column names no longer have prefixes since DataFrames are pre-split.
+
         Args:
-            activities_df: DataFrame with activity metrics
-            metric_prefix: Prefix for metrics (raw_ or moving_)
+            activities_df: DataFrame with activity metrics (single mode)
 
         Returns:
             Weekly aggregated TID metrics
         """
         tid_cols = {
             "power": [
-                f"{metric_prefix}power_tid_z1_percentage",
-                f"{metric_prefix}power_tid_z2_percentage",
-                f"{metric_prefix}power_tid_z3_percentage",
+                "power_tid_z1_percentage",
+                "power_tid_z2_percentage",
+                "power_tid_z3_percentage",
             ],
             "hr": [
-                f"{metric_prefix}hr_tid_z1_percentage",
-                f"{metric_prefix}hr_tid_z2_percentage",
-                f"{metric_prefix}hr_tid_z3_percentage",
+                "hr_tid_z1_percentage",
+                "hr_tid_z2_percentage",
+                "hr_tid_z3_percentage",
             ],
         }
 

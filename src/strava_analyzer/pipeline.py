@@ -3,13 +3,17 @@ Modernized pipeline using service layer architecture.
 
 This is the new, simplified pipeline that uses the service layer
 for better separation of concerns and testability.
+
+NOTE: Pipeline now produces separate output files for raw and moving data:
+- activities_raw.csv: Metrics from all data points
+- activities_moving.csv: Metrics from moving-only data points (contiguous time)
 """
 
 import logging
 from pathlib import Path
 
 from .exceptions import ProcessingError
-from .services import AnalysisService
+from .services import AnalysisService, DualAnalysisResult
 from .settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -41,9 +45,9 @@ class Pipeline:
         This method:
         1. Loads existing data
         2. Identifies activities to process
-        3. Processes new activities
+        3. Processes new activities (separate raw/moving metrics)
         4. Creates summaries
-        5. Saves results
+        5. Saves results to activities_raw.csv and activities_moving.csv
 
         Raises:
             ProcessingError: If pipeline execution fails
@@ -53,15 +57,16 @@ class Pipeline:
             self.logger.info("Starting Modern Pipeline")
             self.logger.info("=" * 60)
 
-            # Run analysis workflow
-            enriched_df, summary = self.analysis_service.run_analysis()
+            # Run analysis workflow (returns DualAnalysisResult)
+            result = self.analysis_service.run_analysis()
 
-            # Save results
-            self.analysis_service.save_results(enriched_df, summary)
+            # Save results to separate files
+            self.analysis_service.save_results(result)
 
             self.logger.info("=" * 60)
             self.logger.info("Pipeline completed successfully")
-            self.logger.info(f"Total activities: {len(enriched_df)}")
+            self.logger.info(f"Total activities (raw): {len(result.raw_df)}")
+            self.logger.info(f"Total activities (moving): {len(result.moving_df)}")
             self.logger.info("=" * 60)
 
         except Exception as e:
@@ -78,7 +83,7 @@ class Pipeline:
             activities_df: DataFrame containing activities to process
 
         Returns:
-            Tuple of (enriched_df, summary_dict)
+            Tuple of (DualAnalysisResult, summary_dict)
 
         Raises:
             ProcessingError: If processing fails
@@ -86,25 +91,25 @@ class Pipeline:
         try:
             self.logger.info("Processing activities through modern pipeline")
 
-            # Run analysis workflow
-            enriched_df, summary = self.analysis_service.run_analysis()
+            # Run analysis workflow (returns DualAnalysisResult)
+            result = self.analysis_service.run_analysis()
 
             # Save results
-            self.analysis_service.save_results(enriched_df, summary)
+            self.analysis_service.save_results(result)
 
             # Convert summary to dict format for CLI compatibility
             summary_dict = {
-                "total_activities": summary.total_activities,
+                "total_activities": result.summary.total_activities,
                 "training_load": {
-                    "status": summary.training_load.status,  # pylint: disable=no-member
-                    "acwr": summary.training_load.acwr,  # pylint: disable=no-member
-                    "ctl": summary.training_load.chronic_training_load,  # pylint: disable=no-member
-                    "atl": summary.training_load.acute_training_load,  # pylint: disable=no-member
-                    "tsb": summary.training_load.training_stress_balance,  # pylint: disable=no-member
+                    "status": result.summary.training_load.status,  # pylint: disable=no-member
+                    "acwr": result.summary.training_load.acwr,  # pylint: disable=no-member
+                    "ctl": result.summary.training_load.chronic_training_load,  # pylint: disable=no-member
+                    "atl": result.summary.training_load.acute_training_load,  # pylint: disable=no-member
+                    "tsb": result.summary.training_load.training_stress_balance,  # pylint: disable=no-member
                 },
             }
 
-            return enriched_df, summary_dict
+            return result, summary_dict
 
         except Exception as e:
             self.logger.error(f"Processing failed: {e}")

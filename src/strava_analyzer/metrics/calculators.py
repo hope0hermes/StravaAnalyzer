@@ -3,6 +3,10 @@ High-level metric calculator orchestrators.
 
 This module provides the main calculator class that coordinates
 all specialized metric calculators.
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names. The orchestrator should
+be called once per mode (raw, moving) with the appropriate DataFrame.
 """
 
 import logging
@@ -29,7 +33,8 @@ class MetricsCalculator:
     Orchestrates calculation of all metrics.
 
     This class coordinates multiple specialized calculators to compute
-    comprehensive metrics from activity stream data.
+    comprehensive metrics from activity stream data. Data is expected to
+    be pre-split into raw or moving DataFrames upstream.
     """
 
     def __init__(self, settings: Settings):
@@ -53,20 +58,22 @@ class MetricsCalculator:
         self,
         stream_df: pd.DataFrame,
         activity_type: str,
-        compute_raw: bool = True,
-        compute_moving: bool = True,
+        include_power_curve: bool = False,
     ) -> dict[str, float | str]:
         """
-        Compute all metrics for both raw and moving-only data.
+        Compute all metrics for a single pre-split DataFrame.
+
+        NOTE: This method should be called once per mode (raw, moving) with
+        the appropriate pre-split DataFrame. Metrics are returned without prefixes.
 
         Args:
-            stream_df: DataFrame containing activity stream data
+            stream_df: Pre-split DataFrame containing activity stream data
             activity_type: Type of activity ('ride', 'run', etc.)
-            compute_raw: Whether to compute metrics from all data
-            compute_moving: Whether to compute metrics from moving-only data
+            include_power_curve: Whether to compute power curve metrics (typically
+                                only for raw data)
 
         Returns:
-            Dictionary containing all calculated metrics with appropriate prefixes
+            Dictionary containing all calculated metrics (no prefixes)
         """
         all_metrics: dict[str, float | str] = {}
 
@@ -74,83 +81,59 @@ class MetricsCalculator:
         is_cycling = activity_type.lower() in ["ride", "virtualride", "virtual_ride"]
         is_running = activity_type.lower() == "run"
 
-        # Compute for raw and/or moving data
-        for moving_only in [False, True]:
-            if (moving_only and not compute_moving) or (
-                not moving_only and not compute_raw
-            ):
-                continue
+        try:
+            # Power metrics (cycling)
+            if is_cycling:
+                power_metrics = self.power_calculator.calculate(stream_df)
+                all_metrics.update(power_metrics)
 
-            prefix = "moving_" if moving_only else "raw_"
+                # Power curve (MMP) metrics - only if requested
+                if include_power_curve:
+                    power_curve_metrics = self._calculate_power_curve_metrics(stream_df)
+                    all_metrics.update(power_curve_metrics)
 
-            try:
-                # Power metrics (cycling)
-                if is_cycling:
-                    power_metrics = self.power_calculator.calculate(
-                        stream_df, moving_only
-                    )
-                    all_metrics.update(power_metrics)
+            # Heart rate metrics (all activities)
+            hr_metrics = self.hr_calculator.calculate(stream_df)
+            all_metrics.update(hr_metrics)
 
-                    # Power curve (MMP) metrics - only compute once for raw data
-                    if not moving_only:
-                        power_curve_metrics = self._calculate_power_curve_metrics(
-                            stream_df
-                        )
-                        all_metrics.update(power_curve_metrics)
+            # Efficiency metrics (cycling and running)
+            efficiency_metrics = self.efficiency_calculator.calculate(stream_df)
+            all_metrics.update(efficiency_metrics)
 
-                # Heart rate metrics (all activities)
-                hr_metrics = self.hr_calculator.calculate(stream_df, moving_only)
-                all_metrics.update(hr_metrics)
+            # Pace metrics (running)
+            if is_running:
+                pace_metrics = self.pace_calculator.calculate(stream_df)
+                all_metrics.update(pace_metrics)
 
-                # Efficiency metrics (cycling and running)
-                efficiency_metrics = self.efficiency_calculator.calculate(
-                    stream_df, moving_only
+            # Basic metrics (cadence, speed)
+            basic_metrics = self.basic_calculator.calculate(stream_df)
+            all_metrics.update(basic_metrics)
+
+            # Zone distributions
+            zone_metrics = self.zone_calculator.calculate(stream_df)
+            all_metrics.update(zone_metrics)
+
+            # Training Intensity Distribution
+            tid_metrics = self.tid_calculator.calculate(stream_df)
+            all_metrics.update(tid_metrics)
+
+            # Add TID classification based on computed TID metrics
+            tid_classification = self._calculate_tid_classification(tid_metrics)
+            all_metrics.update(tid_classification)
+
+            # Fatigue resistance (only for activities > 1 hour)
+            fatigue_metrics = self.fatigue_calculator.calculate(stream_df)
+            all_metrics.update(fatigue_metrics)
+
+            # Interval fatigue analysis (5-minute intervals)
+            if is_cycling and include_power_curve:
+                interval_fatigue = self.fatigue_calculator.calculate_interval_fatigue(
+                    stream_df, interval_duration=300
                 )
-                all_metrics.update(efficiency_metrics)
+                all_metrics.update(interval_fatigue)
 
-                # Pace metrics (running)
-                if is_running:
-                    pace_metrics = self.pace_calculator.calculate(
-                        stream_df, moving_only
-                    )
-                    all_metrics.update(pace_metrics)
-
-                # Basic metrics (cadence, speed)
-                basic_metrics = self.basic_calculator.calculate(stream_df, moving_only)
-                all_metrics.update(basic_metrics)
-
-                # Zone distributions
-                zone_metrics = self.zone_calculator.calculate(stream_df, moving_only)
-                all_metrics.update(zone_metrics)
-
-                # Training Intensity Distribution
-                tid_metrics = self.tid_calculator.calculate(stream_df, moving_only)
-                all_metrics.update(tid_metrics)
-
-                # Add TID classification based on computed TID metrics
-                tid_classification = self._calculate_tid_classification(
-                    tid_metrics, prefix
-                )
-                all_metrics.update(tid_classification)
-
-                # Fatigue resistance (only for activities > 1 hour)
-                fatigue_metrics = self.fatigue_calculator.calculate(
-                    stream_df, moving_only
-                )
-                all_metrics.update(fatigue_metrics)
-
-                # Interval fatigue analysis (5-minute intervals)
-                if is_cycling and not moving_only:
-                    interval_fatigue = (
-                        self.fatigue_calculator.calculate_interval_fatigue(
-                            stream_df, interval_duration=300
-                        )
-                    )
-                    all_metrics.update(interval_fatigue)
-
-            except Exception as e:
-                prefix = "moving_" if moving_only else "raw_"
-                logger.error(f"Error calculating {prefix}metrics: {e}")
+        except Exception as e:
+            logger.error(f"Error calculating metrics: {e}")
 
         # Add basic temporal metrics
         all_metrics.update(self._calculate_basic_metrics(stream_df))
@@ -252,24 +235,23 @@ class MetricsCalculator:
         return metrics
 
     def _calculate_tid_classification(
-        self, tid_metrics: dict[str, float], prefix: str
+        self, tid_metrics: dict[str, float]
     ) -> dict[str, float | str]:
         """
         Calculate TID classification based on computed TID metrics.
 
         Args:
-            tid_metrics: Dictionary of TID metrics from TIDCalculator
-            prefix: Metric name prefix ('raw_' or 'moving_')
+            tid_metrics: Dictionary of TID metrics from TIDCalculator (no prefixes)
 
         Returns:
-            Dictionary with TID classification
+            Dictionary with TID classification (no prefixes)
         """
         metrics: dict[str, float | str] = {}
 
         # Try power-based classification first
-        power_z1_key = f"{prefix}power_tid_z1_percentage"
-        power_z2_key = f"{prefix}power_tid_z2_percentage"
-        power_z3_key = f"{prefix}power_tid_z3_percentage"
+        power_z1_key = "power_tid_z1_percentage"
+        power_z2_key = "power_tid_z2_percentage"
+        power_z3_key = "power_tid_z3_percentage"
 
         if all(k in tid_metrics for k in [power_z1_key, power_z2_key, power_z3_key]):
             classification = self.tid_calculator.calculate_tid_classification(
@@ -277,12 +259,12 @@ class MetricsCalculator:
                 tid_metrics[power_z2_key],
                 tid_metrics[power_z3_key],
             )
-            metrics[f"{prefix}power_tid_classification"] = classification
+            metrics["power_tid_classification"] = classification
 
         # Also try HR-based classification
-        hr_z1_key = f"{prefix}hr_tid_z1_percentage"
-        hr_z2_key = f"{prefix}hr_tid_z2_percentage"
-        hr_z3_key = f"{prefix}hr_tid_z3_percentage"
+        hr_z1_key = "hr_tid_z1_percentage"
+        hr_z2_key = "hr_tid_z2_percentage"
+        hr_z3_key = "hr_tid_z3_percentage"
 
         if all(k in tid_metrics for k in [hr_z1_key, hr_z2_key, hr_z3_key]):
             classification = self.tid_calculator.calculate_tid_classification(
@@ -290,6 +272,6 @@ class MetricsCalculator:
                 tid_metrics[hr_z2_key],
                 tid_metrics[hr_z3_key],
             )
-            metrics[f"{prefix}hr_tid_classification"] = classification
+            metrics["hr_tid_classification"] = classification
 
         return metrics

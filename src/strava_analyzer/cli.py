@@ -126,9 +126,9 @@ def run(
 
         # Process activities and generate summary
         logger.info("Processing activities and generating analysis...")
-        result_df, summary = pipeline.process_activities(activities_df)
+        dual_result, summary = pipeline.process_activities(activities_df)
 
-        logger.info(f"Successfully processed {len(result_df)} activities")
+        logger.info(f"Successfully processed {summary['total_activities']} activities")
 
         # Display summary statistics
         click.echo("\n" + "="*50)

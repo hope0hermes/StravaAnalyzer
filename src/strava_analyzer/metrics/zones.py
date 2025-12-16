@@ -7,6 +7,9 @@ This module handles time-in-zone calculations for:
 - Cadence zones
 
 Also provides utility functions for binning features and calculating power profiles.
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -26,34 +29,29 @@ logger = logging.getLogger(__name__)
 class ZoneCalculator(BaseMetricCalculator):
     """Calculates zone distributions from activity stream data."""
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate zone distributions.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of zone metrics with appropriate prefix
+            Dictionary of zone metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
-        metrics = {}
+        metrics: dict[str, float] = {}
 
         # Calculate power zones if available
-        if "watts" in df.columns and self.settings.ftp > 0:
-            power_zones = self._calculate_power_zones(df["watts"])
+        if "watts" in stream_df.columns and self.settings.ftp > 0:
+            power_zones = self._calculate_power_zones(stream_df["watts"])
             for zone_name, percentage in power_zones.items():
-                metrics[f"{prefix}{zone_name}_percentage"] = percentage
+                metrics[f"{zone_name}_percentage"] = percentage
 
         # Calculate HR zones if available
-        if "heartrate" in df.columns and self.settings.fthr > 0:
-            hr_zones = self._calculate_hr_zones(df["heartrate"])
+        if "heartrate" in stream_df.columns and self.settings.fthr > 0:
+            hr_zones = self._calculate_hr_zones(stream_df["heartrate"])
             for zone_name, percentage in hr_zones.items():
-                metrics[f"{prefix}{zone_name}_percentage"] = percentage
+                metrics[f"{zone_name}_percentage"] = percentage
 
         return metrics
 

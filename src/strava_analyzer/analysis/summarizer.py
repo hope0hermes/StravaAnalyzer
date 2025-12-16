@@ -61,12 +61,10 @@ class ActivitySummarizer:
         mask = df["start_date"] <= as_of_date
         df = df[mask].copy()
 
-        # Use moving TSS if available, otherwise fall back to raw TSS
-        tss_column = (
-            "moving_training_stress_score"
-            if "moving_training_stress_score" in df.columns
-            else "raw_training_stress_score"
-        )
+        # After refactoring (data split upstream), columns are unprefixed
+        # Look for training_stress_score column
+        tss_column = "training_stress_score"
+
         if tss_column not in df.columns or df[tss_column].isna().all():
             return TrainingLoadSummary(
                 chronic_training_load=0.0,
@@ -256,6 +254,17 @@ class ActivitySummarizer:
         """
         # Apply date filters if provided
         df = activities_df.copy()
+
+        # Ensure start_date and end_date are datetime objects
+        if start_date and not isinstance(start_date, pd.Timestamp):
+            start_date = pd.to_datetime(start_date, format='ISO8601', utc=True)
+        if end_date and not isinstance(end_date, pd.Timestamp):
+            end_date = pd.to_datetime(end_date, format='ISO8601', utc=True)
+
+        # Ensure the date column is datetime
+        if "start_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["start_date"]):
+            df["start_date"] = pd.to_datetime(df["start_date"], format='ISO8601', utc=True)
+
         if start_date:
             df = df[df["start_date"] >= start_date]
         if end_date:

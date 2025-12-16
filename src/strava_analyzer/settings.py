@@ -295,13 +295,22 @@ class Settings(BaseSettings):
 def load_settings(config_file: Path | None = None) -> Settings:
     """Load settings from a YAML file, environment variables, and defaults."""
     if config_file:
+        # Ensure config_file is absolute path
+        config_file = Path(config_file).expanduser().resolve()
+
         with open(config_file, encoding="utf-8") as f:
             yaml_settings = yaml.safe_load(f)
 
         # Ensure data_dir exists and is absolute
-        data_dir = Path(yaml_settings.get("data_dir", "")).expanduser().resolve()
+        data_dir_str = yaml_settings.get("data_dir", "")
+        data_dir = Path(data_dir_str).expanduser()
+
+        # If relative, join with config file's parent directory
         if not data_dir.is_absolute():
             data_dir = config_file.parent / data_dir
+
+        # Now resolve to absolute path
+        data_dir = data_dir.resolve()
 
         # Join relative paths with data_dir
         if (
@@ -318,11 +327,18 @@ def load_settings(config_file: Path | None = None) -> Settings:
             yaml_settings["streams_dir"] = str(data_dir / yaml_settings["streams_dir"])
 
         # Handle processed data paths similarly
-        processed_dir = (
-            Path(yaml_settings.get("processed_data_dir", "")).expanduser().resolve()
-        )
+        processed_dir_str = yaml_settings.get("processed_data_dir", "")
+        processed_dir = Path(processed_dir_str).expanduser()
+
+        # If relative, join with config file's parent directory
         if not processed_dir.is_absolute():
             processed_dir = config_file.parent / processed_dir
+
+        # Now resolve to absolute path
+        processed_dir = processed_dir.resolve()
+
+        # Update yaml_settings with resolved path so Settings uses the correct path
+        yaml_settings["processed_data_dir"] = str(processed_dir)
 
         # Create a Settings object from YAML, then merge with env vars/defaults
         return Settings(**yaml_settings)

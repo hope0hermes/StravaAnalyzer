@@ -3,16 +3,21 @@ High-level service for coordinating full analysis workflows.
 
 This service orchestrates the complete analysis process including
 data loading, processing, threshold estimation, and summarization.
+
+NOTE: Analysis now produces separate output files for raw and moving data:
+- activities_raw.csv: Metrics from all data points
+- activities_moving.csv: Metrics from moving-only data points (contiguous time)
 """
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 import pandas as pd
 
-from ..analysis import ActivitySummarizer, ThresholdEstimator
+from ..analysis import ActivitySummarizer, AnalysisResult, ThresholdEstimator
 from ..constants import CSVConstants, TrainingLoadWindows
 from ..data import ActivityDataLoader
 from ..exceptions import DataLoadError, ProcessingError
@@ -24,10 +29,26 @@ from .activity_service import ActivityService
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class DualAnalysisResult:
+    """
+    Result containing separate DataFrames for raw and moving data.
+
+    Attributes:
+        raw_df: DataFrame with metrics from all data points
+        moving_df: DataFrame with metrics from moving-only data points
+        summary: Longitudinal summary (computed from raw data)
+    """
+
+    raw_df: pd.DataFrame
+    moving_df: pd.DataFrame
+    summary: LongitudinalSummary
+
+
 class AnalysisServiceProtocol(Protocol):
     """Protocol for analysis services."""
 
-    def run_analysis(self) -> tuple[pd.DataFrame, LongitudinalSummary]:
+    def run_analysis(self) -> DualAnalysisResult:
         """Run complete analysis workflow."""
         ...
 
@@ -39,10 +60,10 @@ class AnalysisService:
     This service orchestrates:
     - Loading existing data
     - Identifying activities to process
-    - Processing activities
+    - Processing activities (separate raw/moving metrics)
     - Estimating thresholds
     - Creating summaries
-    - Saving results
+    - Saving results to separate output files
     """
 
     def __init__(self, settings: Settings):
@@ -62,12 +83,12 @@ class AnalysisService:
         self.summarizer = ActivitySummarizer(settings)
         self.zone_edges_manager = ZoneEdgesManager(settings)
 
-    def run_analysis(self) -> tuple[pd.DataFrame, LongitudinalSummary]:
+    def run_analysis(self) -> DualAnalysisResult:
         """
         Run the complete analysis workflow.
 
         Returns:
-            Tuple of (enriched activities DataFrame, longitudinal summary)
+            DualAnalysisResult with raw_df, moving_df, and summary
 
         Raises:
             DataLoadError: If data loading fails
@@ -76,67 +97,108 @@ class AnalysisService:
         try:
             # Load existing data
             self.logger.info("Starting analysis workflow")
-            enriched_df, historical_thresholds = self._load_existing_data()
+            raw_df, moving_df, historical_thresholds = self._load_existing_data()
 
             # Get activities to process
             activities_to_process = self.activity_service.get_activities_to_process()
 
             if activities_to_process.empty:
                 self.logger.info("No new activities to process")
-                if enriched_df is None:
+                if raw_df is None:
                     raise DataLoadError("No activities to analyze")
             else:
                 # Process new activities
-                new_enriched = self._process_activities(
+                new_raw_df, new_moving_df = self._process_activities(
                     activities_to_process, historical_thresholds
                 )
 
                 # Merge with existing data
-                if enriched_df is not None:
-                    enriched_df = pd.concat(
-                        [enriched_df, new_enriched], ignore_index=True
-                    )
+                if raw_df is not None:
+                    raw_df = pd.concat([raw_df, new_raw_df], ignore_index=True)
+                    moving_df = pd.concat([moving_df, new_moving_df], ignore_index=True)
                 else:
-                    enriched_df = new_enriched
+                    raw_df = new_raw_df
+                    moving_df = new_moving_df
 
-            # STEP 1: Sort by start_date_local in descending order (most recent first)
-            if enriched_df is not None and not enriched_df.empty:
-                if "start_date_local" in enriched_df.columns:
-                    enriched_df = enriched_df.sort_values(
-                        "start_date_local", ascending=False
-                    ).reset_index(drop=True)
-                    self.logger.info("Sorted activities by start_date_local (descending)")
+            # Apply post-processing to both DataFrames
+            raw_df = self._apply_post_processing(raw_df)
+            moving_df = self._apply_post_processing(moving_df)
 
-                # STEP 2: Apply zone edges with backpropagation as FIRST metric step
-                enriched_df = self.zone_edges_manager.apply_zone_edges_with_backpropagation(
-                    enriched_df, config_timestamp=datetime.now()
-                )
-                self.logger.info("Applied zone edges with backpropagation")
-
-            # Create summary
-            summary = self.summarizer.summarize(enriched_df)
+            # Create summary (from raw data for consistency)
+            summary = self.summarizer.summarize(raw_df)
 
             self.logger.info("Analysis workflow completed successfully")
-            return enriched_df, summary
+            return DualAnalysisResult(
+                raw_df=raw_df,
+                moving_df=moving_df,
+                summary=summary,
+            )
 
         except Exception as e:
             self.logger.error(f"Analysis workflow failed: {e}")
             raise ProcessingError(f"Error in analysis workflow: {e}") from e
 
+    def _apply_post_processing(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply post-processing to an enriched DataFrame.
+
+        Args:
+            df: DataFrame to process
+
+        Returns:
+            Processed DataFrame
+        """
+        if df is None or df.empty:
+            return df
+
+        # Sort by start_date_local in descending order (most recent first)
+        if "start_date_local" in df.columns:
+            df = df.sort_values("start_date_local", ascending=False).reset_index(
+                drop=True
+            )
+            self.logger.info("Sorted activities by start_date_local (descending)")
+
+        # Apply zone edges with backpropagation
+        df = self.zone_edges_manager.apply_zone_edges_with_backpropagation(
+            df, config_timestamp=datetime.now()
+        )
+        self.logger.info("Applied zone edges with backpropagation")
+
+        return df
+
     def _load_existing_data(
         self,
-    ) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
-        """Load existing enriched activities and historical thresholds."""
+    ) -> tuple[pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None]:
+        """
+        Load existing enriched activities (raw and moving) and historical thresholds.
+
+        Returns:
+            Tuple of (raw_df, moving_df, historical_thresholds)
+        """
         self.logger.info("Loading existing data")
 
-        enriched_df = self.loader.load_enriched_activities()
+        # Load raw activities
+        raw_file = self.settings.processed_data_dir / "activities_raw.csv"
+        raw_df = None
+        if raw_file.exists():
+            raw_df = pd.read_csv(raw_file, sep=CSVConstants.DEFAULT_SEPARATOR)
+            self.logger.info(f"Loaded {len(raw_df)} existing raw activities")
+
+        # Load moving activities
+        moving_file = self.settings.processed_data_dir / "activities_moving.csv"
+        moving_df = None
+        if moving_file.exists():
+            moving_df = pd.read_csv(moving_file, sep=CSVConstants.DEFAULT_SEPARATOR)
+            self.logger.info(f"Loaded {len(moving_df)} existing moving activities")
+
+        # Load historical thresholds
         historical_thresholds = self.loader.load_historical_thresholds()
 
-        return enriched_df, historical_thresholds
+        return raw_df, moving_df, historical_thresholds
 
     def _process_activities(
         self, activities_df: pd.DataFrame, historical_thresholds: pd.DataFrame | None
-    ) -> pd.DataFrame:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Process a set of activities.
 
@@ -145,11 +207,12 @@ class AnalysisService:
             historical_thresholds: Historical threshold data
 
         Returns:
-            DataFrame of enriched activities
+            Tuple of (raw_df, moving_df) enriched DataFrames
         """
         self.logger.info(f"Processing {len(activities_df)} activities")
 
-        enriched_rows = []
+        raw_rows = []
+        moving_rows = []
 
         for idx, activity_row in activities_df.iterrows():
             activity_id = activity_row["id"]
@@ -160,12 +223,19 @@ class AnalysisService:
                     self.logger.warning(f"No stream data for activity {activity_id}")
                     continue
 
-                # Process activity
-                metrics, _ = self.activity_service.process_activity(activity_row)
+                # Process activity (returns AnalysisResult with raw/moving metrics)
+                analysis_result, _ = self.activity_service.process_activity(activity_row)
 
-                # Combine metadata and metrics
-                enriched_row = {**activity_row.to_dict(), **metrics}
-                enriched_rows.append(enriched_row)
+                # Combine metadata with raw metrics
+                raw_enriched = {**activity_row.to_dict(), **analysis_result.raw_metrics}
+                raw_rows.append(raw_enriched)
+
+                # Combine metadata with moving metrics
+                moving_enriched = {
+                    **activity_row.to_dict(),
+                    **analysis_result.moving_metrics,
+                }
+                moving_rows.append(moving_enriched)
 
                 self.logger.info(
                     f"Processed activity {activity_id} ({idx + 1}/{len(activities_df)})"
@@ -175,48 +245,41 @@ class AnalysisService:
                 self.logger.error(f"Failed to process activity {activity_id}: {e}")
                 continue
 
-        if not enriched_rows:
+        if not raw_rows:
             self.logger.warning("No activities were successfully processed")
-            return pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame()
 
-        enriched_df = pd.DataFrame(enriched_rows)
-        self.logger.info(f"Successfully processed {len(enriched_df)} activities")
+        raw_df = pd.DataFrame(raw_rows)
+        moving_df = pd.DataFrame(moving_rows)
+        self.logger.info(f"Successfully processed {len(raw_df)} activities")
 
-        return enriched_df
+        return raw_df, moving_df
 
-    def save_results(
-        self, enriched_df: pd.DataFrame, summary: LongitudinalSummary
-    ) -> None:
+    def save_results(self, result: DualAnalysisResult) -> None:
         """
         Save analysis results to files.
 
+        Saves separate files for raw and moving data:
+        - activities_raw.csv
+        - activities_moving.csv
+        - activity_summary.json
+
         Args:
-            enriched_df: Enriched activities DataFrame
-            summary: Longitudinal summary object
+            result: DualAnalysisResult containing raw_df, moving_df, and summary
         """
         try:
-            # Add FTP/FTHR columns for reference
-            enriched_df_export = enriched_df.copy()
-            enriched_df_export["ftp"] = self.settings.ftp
-            enriched_df_export["fthr"] = self.settings.fthr
+            # Process and save raw DataFrame
+            raw_export = self._prepare_df_for_export(result.raw_df)
+            raw_file = self.settings.processed_data_dir / "activities_raw.csv"
+            self.logger.info(f"Saving raw activities to {raw_file}")
+            raw_export.to_csv(raw_file, index=False, sep=CSVConstants.DEFAULT_SEPARATOR)
 
-            # Add LT values (from stress test) for reference
-            enriched_df_export["lt1_power"] = self.settings.lt1_power
-            enriched_df_export["lt2_power"] = self.settings.lt2_power
-            enriched_df_export["lt1_hr"] = self.settings.lt1_hr
-            enriched_df_export["lt2_hr"] = self.settings.lt2_hr
-
-            # Compute per-activity training load metrics (CTL, ATL, TSB, ACWR)
-            enriched_df_export = self._compute_per_activity_training_load(enriched_df_export)
-
-            # Compute per-activity CP model metrics (CP, W', r², AEI) with rolling window
-            enriched_df_export = self._compute_per_activity_cp_model(enriched_df_export)
-
-            # Save enriched activities
-            output_file = self.settings.activities_enriched_file
-            self.logger.info(f"Saving enriched activities to {output_file}")
-            enriched_df_export.to_csv(
-                output_file, index=False, sep=CSVConstants.DEFAULT_SEPARATOR
+            # Process and save moving DataFrame
+            moving_export = self._prepare_df_for_export(result.moving_df)
+            moving_file = self.settings.processed_data_dir / "activities_moving.csv"
+            self.logger.info(f"Saving moving activities to {moving_file}")
+            moving_export.to_csv(
+                moving_file, index=False, sep=CSVConstants.DEFAULT_SEPARATOR
             )
 
             # Save summary
@@ -224,7 +287,7 @@ class AnalysisService:
             self.logger.info(f"Saving summary to {summary_file}")
 
             # Convert to dict for serialization (Pydantic model)
-            summary_dict = summary.model_dump()
+            summary_dict = result.summary.model_dump()
 
             with open(summary_file, "w", encoding="utf-8") as f:
                 json.dump(summary_dict, f, indent=2, default=str)
@@ -234,6 +297,39 @@ class AnalysisService:
         except Exception as e:
             self.logger.error(f"Failed to save results: {e}")
             raise ProcessingError(f"Failed to save results: {e}") from e
+
+    def _prepare_df_for_export(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Prepare a DataFrame for export by adding metadata and computing training load.
+
+        Args:
+            df: DataFrame to prepare
+
+        Returns:
+            DataFrame ready for export
+        """
+        if df is None or df.empty:
+            return df
+
+        df_export = df.copy()
+
+        # Add FTP/FTHR columns for reference
+        df_export["ftp"] = self.settings.ftp
+        df_export["fthr"] = self.settings.fthr
+
+        # Add LT values (from stress test) for reference
+        df_export["lt1_power"] = self.settings.lt1_power
+        df_export["lt2_power"] = self.settings.lt2_power
+        df_export["lt1_hr"] = self.settings.lt1_hr
+        df_export["lt2_hr"] = self.settings.lt2_hr
+
+        # Compute per-activity training load metrics (CTL, ATL, TSB, ACWR)
+        df_export = self._compute_per_activity_training_load(df_export)
+
+        # Compute per-activity CP model metrics (CP, W', r², AEI) with rolling window
+        df_export = self._compute_per_activity_cp_model(df_export)
+
+        return df_export
 
     def _compute_per_activity_training_load(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -254,12 +350,8 @@ class AnalysisService:
         """
         import numpy as np
 
-        # Determine TSS column to use
-        tss_column = (
-            "moving_training_stress_score"
-            if "moving_training_stress_score" in df.columns
-            else "raw_training_stress_score"
-        )
+        # Determine TSS column to use (now without prefix since data is pre-split)
+        tss_column = "training_stress_score"
 
         if tss_column not in df.columns:
             self.logger.warning("No TSS column found, skipping training load calculation")
@@ -281,7 +373,7 @@ class AnalysisService:
 
         # Sort by date ASCENDING for chronological processing
         df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
+        df[date_col] = pd.to_datetime(df[date_col], format='ISO8601', utc=True)
         df = df.sort_values(date_col, ascending=True).reset_index(drop=True)
 
         # Time constants in days
@@ -389,7 +481,7 @@ class AnalysisService:
 
         # Sort by date ASCENDING for chronological processing
         df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], utc=True)
+        df[date_col] = pd.to_datetime(df[date_col], format='ISO8601', utc=True)
         df = df.sort_values(date_col, ascending=True).reset_index(drop=True)
 
         # Get CP window from constants (default 90 days)

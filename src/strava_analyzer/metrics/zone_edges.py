@@ -116,7 +116,7 @@ class ZoneEdgesManager:
 
         # Convert to datetime if needed
         if not pd.api.types.is_datetime64_any_dtype(df["start_date_local"]):
-            df["start_date_local"] = pd.to_datetime(df["start_date_local"])
+            df["start_date_local"] = pd.to_datetime(df["start_date_local"], format='ISO8601', utc=True)
 
         # Sort by start_date_local in descending order (most recent first)
         df = df.sort_values("start_date_local", ascending=False).reset_index(drop=True)

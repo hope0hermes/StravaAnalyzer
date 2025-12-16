@@ -1,43 +1,272 @@
-data_dir: "/home/hope0hermes/Workspace/StravaAnalyzer/tests/data"
-processed_data_dir: "/home/hope0hermes/Workspace/StravaAnalyzer/temp"
+# ============================================================================
+# SAMPLE STRAVA ANALYZER CONFIGURATION
+# ============================================================================
+# This is a complete working example showing all major configuration options.
+# Copy this file and customize with YOUR athlete data to get started.
+#
+# Usage:
+#   uv run strava-analyzer run --config config_example.yaml
+#
+# Date: December 2025
+# ============================================================================
 
-# Activities and streams paths will be relative to data_dir
+# ============================================================================
+# SECTION 1: DATA PATHS
+# ============================================================================
+# Location of your Strava export data and where to save results.
+# Paths can be absolute or relative to the config file location.
+
+# Root directory containing activities.csv and Streams/ folder
+# (from your Strava data export)
+data_dir: "/home/hope0hermes/Workspace/ActivitiesViewer/dev/data"
+
+# Processed data output directory
+# (enriched CSV files and summaries will be saved here)
+processed_data_dir: "/home/hope0hermes/Workspace/ActivitiesViewer/dev/data_enriched"
+
+# Activities metadata file (from Strava export)
 activities_file: "activities.csv"
+
+# Activity stream data directory (from Strava export)
 streams_dir: "Streams"
+
+
+# ============================================================================
+# SECTION 2: ATHLETE PROFILE (REQUIRED)
+# ============================================================================
+# Your physiological metrics - these are ESSENTIAL for accurate analysis.
+# All metrics are calculated relative to these values.
+
+# Functional Threshold Power (watts)
+# - Your sustainable power for ~60 minutes
+# - Typical values: 200W (recreational) to 400W+ (elite)
+# - How to find it: 20-minute power test × 0.95, or ramp test
+# - Impact: Basis for ALL power metrics and zone calculations
+ftp: 285.0
+
+# Functional Threshold Heart Rate (bpm)
+# - Your heart rate sustained for ~60 minutes at FTP
+# - Typical values: 140-190 bpm depending on fitness
+# - How to find it: Hold threshold power and measure average HR, or ramp test
+# - Impact: Basis for HR zones and hrTSS calculation
+fthr: 170
+
+# Rider/Athlete Body Weight (kilograms)
+# - Current body weight in kg
+# - Used for: Power per kg, Anaerobic Energy Index (W'/kg)
+# - Important: Update this when weight changes significantly
+rider_weight_kg: 79.0
+
+# Functional Threshold Pace (minutes per kilometer)
+# - Your sustainable running pace for ~60 minutes
+# - Optional: Only if analyzing running activities
+# - Format: decimal minutes (e.g., 4.5 = 4:30 min/km)
+ftpace: 5.0
+
+
+# ============================================================================
+# SECTION 3: ADVANCED LACTATE THRESHOLD (OPTIONAL)
+# ============================================================================
+# For sports with lactate testing (cycling, running).
+# If provided, enables physiologically-accurate zone models.
+# If not provided, system uses Coggan percentage-based zones (standard).
+#
+# Lactate Threshold points can come from:
+# - Ramp test with lactate sampling
+# - Threshold power test (20-min) and crossover estimate
+# - Professional testing lab
+
+# Lower Lactate Threshold Power (watts)
+# - Also called: Aerobic Threshold, VT1
+# - Where aerobic system reaches its limit
+# - Typical: 55-65% of FTP
+# - If omitted: System uses 55% of FTP
+lt1_power: 190
+
+# Upper Lactate Threshold Power (watts)
+# - Also called: Anaerobic Threshold, VT2
+# - Often equal to FTP for well-trained athletes
+# - Typical: 90-110% of FTP
+# - If omitted: System uses FTP and percentage-based zones
+lt2_power: 257
+
+# Lower Lactate Threshold Heart Rate (bpm)
+# - Aerobic threshold HR (where lactate begins accumulating)
+# - Typical: 80-90% of FTHR
+# - If omitted: System uses 85% of FTHR
+lt1_hr: 129
+
+# Upper Lactate Threshold Heart Rate (bpm)
+# - Anaerobic threshold HR
+# - Typical: 95-105% of FTHR
+# - If omitted: System uses FTHR as upper boundary
+lt2_hr: 155
+
+
+# ============================================================================
+# SECTION 4: TRAINING LOAD & READINESS METRICS
+# ============================================================================
+# Configuration for CTL, ATL, TSB, and ACWR calculations.
+# These use time-based exponential decay to track training status.
+
+training_load:
+  # Chronic Training Load window (days)
+  # - Measures accumulated fitness over time
+  # - Default: 42 days (industry standard)
+  # - Higher values = longer memory, more stable
+  # - Lower values = more responsive to recent changes
+  # - Typical range: 28-60 days
+  ctl_days: 42
+
+  # Acute Training Load window (days)
+  # - Measures recent fatigue/stress
+  # - Default: 7 days (industry standard)
+  # - Higher values = longer fatigue memory
+  # - Lower values = faster recovery recognition
+  # - Typical range: 5-14 days
+  atl_days: 7
+
+  # FTP Rolling Window (days)
+  # - Window for estimating best FTP from recent activities
+  # - Used when computing FTP from 20-minute efforts
+  # - Typical: 42 days (6 weeks of recent fitness)
+  ftp_rolling_window_days: 42
+
+  # TSB (Training Stress Balance) Interpretation Thresholds
+  tsb_thresholds:
+    fresh_start: 20        # > 20: Fresh, peak condition
+    optimal_start: 0       # 0-20: Optimal training zone
+    productive_start: -10  # -10-0: Productive, slightly fatigued
+    overreached_start: -30 # -30--10: Overreached but productive
+    # < -50: Critically fatigued (requires recovery)
+
+  # ACWR (Acute:Chronic Ratio) for Injury Risk Assessment
+  acwr_thresholds:
+    optimal_low: 0.8       # >= 0.8: Sufficient training stimulus
+    optimal_high: 1.3      # <= 1.3: Low injury risk
+    elevated_high: 1.5     # <= 1.5: Moderate risk
+    # > 1.5: High injury risk (overtraining)
+
+
+# ============================================================================
+# SECTION 5: HEART RATE ZONE CONFIGURATION (OPTIONAL)
+# ============================================================================
+# HR zones for monitoring training intensity via heart rate.
+# Used for heart rate-based Training Stress Score (hrTSS).
+
+hr_zones:
+  # HR Zone boundaries (% of FTHR)
+  # Used to classify training intensity when power meter unavailable
+
+  zone1_upper: 0.60      # Recovery: 0-60% FTHR
+  zone2_upper: 0.70      # Endurance: 60-70% FTHR
+  zone3_upper: 0.80      # Tempo: 70-80% FTHR
+  zone4_upper: 0.90      # Threshold: 80-90% FTHR
+  zone5_upper: 1.00      # VO2 Max: 90-100% FTHR
+  # Zone 6+: > 100% FTHR (anaerobic, sprint max HR)
+
+# Heart Rate TSS Weighting
+# Relative effort factor for each HR zone
+# Higher values = more training stress for same HR duration
+hr_tss:
+  zone1_factor: 0.2      # Recovery: minimal stress
+  zone2_factor: 0.4      # Endurance: low stress
+  zone3_factor: 0.6      # Tempo: moderate stress
+  zone4_factor: 0.8      # Threshold: high stress
+  zone5_factor: 1.0      # VO2 Max: maximum stress
+  zone6_factor: 1.2      # Anaerobic/Sprint: extreme stress
+
+
+# ============================================================================
+# SECTION 6: PROCESSING & OUTPUT
+# ============================================================================
+# Control how the analysis runs and what gets output.
+
+# Verbose logging output
 verbose: true
+
+# Force reprocessing of all activities (even if previously processed)
 force: true
 
-# Athlete Specific Settings
-rider_weight_kg: 77.0  # Your weight in kilograms
-ftp: 285.0  # Functional Threshold Power in watts
-fthr: 170  # Functional Threshold Heart Rate in bpm
-ftpace: 4.0  # Functional Threshold Pace in min/km
+# Include power curve (MMP) calculations
+# - Computes maximum mean power for standard durations (5s-1hr)
+# - Enables Critical Power and W' modeling
+# - Adds some computation time
+include_power_curve: true
 
-# Grade Adjustment Configuration
-grade_adjustment:
-  uphill_factor: 0.5
-  downhill_factor: 0.3
-  grade_smoothing_window: 30
+# Validation thresholds
+# Activities below these are flagged but still processed
 
-# Heart Rate Zone Configuration
-hr_zones:
-  zone1_upper: 0.60  # Recovery
-  zone2_upper: 0.70  # Endurance
-  zone3_upper: 0.80  # Tempo
-  zone4_upper: 0.90  # Threshold
-  zone5_upper: 1.00  # VO2max
+validation:
+  min_distance_km: 1.0         # Minimum activity distance
+  min_duration_seconds: 60     # Minimum activity duration
+  min_power_watts: 0           # Minimum power to consider valid
+  max_power_watts: 3000        # Maximum power (outlier detection)
 
-# hrTSS Configuration
-hr_tss:
-  zone1_factor: 0.2
-  zone2_factor: 0.4
-  zone3_factor: 0.6
-  zone4_factor: 0.8
-  zone5_factor: 1.0
-  zone6_factor: 1.2
 
-# Analysis Configuration
-ftp_estimation_factor: 0.95
-ftp_rolling_window_days: 42
-atl_days: 7
-ctl_days: 28
+# ============================================================================
+# SECTION 7: EFFICIENCY METRICS
+# ============================================================================
+# Configuration for efficiency calculations (power/HR coupling).
+
+efficiency:
+  # Smoothing window for aerobic decoupling calculation
+  smoothing_window: 5    # Rolling average window (data points)
+
+  # Time window for decoupling analysis
+  decoupling_minutes: 30 # Analyze first vs second half of session
+
+
+# ============================================================================
+# SECTION 8: CRITICAL POWER MODELING
+# ============================================================================
+# Configuration for CP/W' anaerobic capacity modeling.
+
+critical_power:
+  # Rolling window for finding peak efforts
+  rolling_window_days: 90  # Look at last 90 days of data
+
+  # Durations to include in CP model (seconds)
+  # Longer durations = more aerobic, shorter = more anaerobic
+  durations:
+    - 300    # 5 minutes
+    - 600    # 10 minutes
+    - 1200   # 20 minutes
+    - 1800   # 30 minutes
+    - 3600   # 1 hour
+
+
+# ============================================================================
+# QUICK START INSTRUCTIONS
+# ============================================================================
+#
+# 1. Get your Strava data:
+#    - Log into Strava
+#    - Settings → My Account → Download or Delete Your Account
+#    - Request data export
+#    - Extract archive to get 'activities.csv' and 'Streams/' folder
+#
+# 2. Set up your data:
+#    - Create './data' directory
+#    - Copy 'activities.csv' and 'Streams/' into './data'
+#    - Create './output' directory for results
+#
+# 3. Customize this config:
+#    - Update ftp, fthr, rider_weight_kg with YOUR values
+#    - Update data_dir and processed_data_dir paths
+#    - Optionally add lt1_power, lt2_power for better zones
+#
+# 4. Run the analysis:
+#    uv run strava-analyzer run --config config_example.yaml
+#
+# 5. Check the results:
+#    - processed_data_dir/activities_raw.csv - All metrics from complete data
+#    - processed_data_dir/activities_moving.csv - Metrics from moving-only data
+#    - processed_data_dir/activity_summary.json - Trends and aggregates
+#
+# 6. Load results in your analysis tool:
+#    - Python: pd.read_csv('activities_raw.csv')
+#    - Excel: Open CSV directly
+#    - Dashboard: Use ActivitiesViewer dashboard
+#
+# ============================================================================

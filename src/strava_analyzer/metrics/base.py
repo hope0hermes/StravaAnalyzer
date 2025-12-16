@@ -2,6 +2,10 @@
 Base classes and protocols for metric calculators.
 
 Defines the interface that all metric calculators should follow.
+
+NOTE: As of the refactoring (December 2025), the data is split into raw and moving
+DataFrames BEFORE metric calculation. Calculators no longer need to filter or
+apply prefixes - they receive pre-split data and return unprefixed metric names.
 """
 
 from abc import ABC, abstractmethod
@@ -16,18 +20,15 @@ from ..settings import Settings
 class MetricCalculatorProtocol(Protocol):
     """Protocol defining the interface for metric calculators."""
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate metrics from stream data.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (already split)
 
         Returns:
-            Dictionary of calculated metrics
+            Dictionary of calculated metrics (no prefix needed)
         """
         ...
 
@@ -37,6 +38,10 @@ class BaseMetricCalculator(ABC):
     Abstract base class for metric calculators.
 
     Provides common functionality and enforces interface consistency.
+
+    NOTE: Calculators receive pre-split DataFrames (either raw or moving).
+    The splitting is done upstream by StreamSplitter, so calculators don't
+    need to filter data or apply prefixes.
     """
 
     def __init__(self, settings: Settings):
@@ -49,61 +54,28 @@ class BaseMetricCalculator(ABC):
         self.settings = settings
 
     @abstractmethod
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate metrics from stream data.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of calculated metrics
+            Dictionary of calculated metrics (no prefix)
         """
         raise NotImplementedError("Subclasses must implement calculate()")
 
-    def _filter_moving(
-        self, stream_df: pd.DataFrame, moving_only: bool
-    ) -> pd.DataFrame:
-        """
-        Filter dataframe to moving data if requested.
-
-        Args:
-            stream_df: Input dataframe
-            moving_only: Whether to filter to moving-only data
-
-        Returns:
-            Filtered or original dataframe
-        """
-        if moving_only and "moving" in stream_df.columns:
-            return stream_df[stream_df["moving"]].copy()
-        return stream_df.copy()
-
-    def _get_prefix(self, moving_only: bool) -> str:
-        """
-        Get metric name prefix based on data type.
-
-        Args:
-            moving_only: Whether metrics are from moving-only data
-
-        Returns:
-            Prefix string ('raw_' or 'moving_')
-        """
-        return "moving_" if moving_only else "raw_"
-
-    def _calculate_time_deltas(
-        self, stream_df: pd.DataFrame, clip_gaps: bool = False
-    ) -> pd.Series:
+    def _calculate_time_deltas(self, stream_df: pd.DataFrame) -> pd.Series:
         """
         Calculate time differences between consecutive data points.
 
+        Since the data is pre-split (raw or moving with contiguous time),
+        we no longer need gap clipping logic. The moving DataFrame already
+        has contiguous time (0, 1, 2, ...).
+
         Args:
             stream_df: DataFrame containing 'time' column
-            clip_gaps: If True, clip large deltas (>GAP_DETECTION_THRESHOLD) to
-                prevent filtered gaps from affecting moving metrics. Use False
-                for raw metrics.
 
         Returns:
             Series of time deltas in seconds
@@ -120,14 +92,14 @@ class BaseMetricCalculator(ABC):
         # Handle any negative or zero deltas
         time_diffs = time_diffs.clip(lower=1.0)
 
-        # For moving metrics, clip large deltas that span filtered-out gaps
-        if clip_gaps:
-            time_diffs = time_diffs.clip(upper=TimeConstants.GAP_DETECTION_THRESHOLD)
+        # For moving data with contiguous time, deltas will naturally be ~1.0
+        # For raw data, larger deltas represent stopped periods
+        # No special handling needed anymore since data is pre-split
 
         return time_diffs
 
     def _time_weighted_mean(
-        self, values: pd.Series, stream_df: pd.DataFrame, clip_gaps: bool = False
+        self, values: pd.Series, stream_df: pd.DataFrame
     ) -> float:
         """
         Calculate time-weighted mean of a series.
@@ -135,7 +107,6 @@ class BaseMetricCalculator(ABC):
         Args:
             values: Series of values to average
             stream_df: DataFrame containing 'time' column for weighting
-            clip_gaps: If True, clip time deltas >2s (for moving metrics)
 
         Returns:
             Time-weighted mean
@@ -144,9 +115,7 @@ class BaseMetricCalculator(ABC):
             return 0.0
 
         # Get time deltas
-        time_deltas = self._calculate_time_deltas(
-            stream_df.loc[values.index], clip_gaps=clip_gaps
-        )
+        time_deltas = self._calculate_time_deltas(stream_df.loc[values.index])
 
         # Calculate weighted mean: Σ(value × Δt) / Σ(Δt)
         weighted_sum = (values * time_deltas).sum()
@@ -169,3 +138,4 @@ class BaseMetricCalculator(ABC):
 
         # Total duration is the time deltas sum
         return float(self._calculate_time_deltas(stream_df).sum())
+

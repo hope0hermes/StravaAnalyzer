@@ -5,6 +5,9 @@ This module provides metrics for analyzing fatigue during activities:
 - Fatigue index from power decay
 - First/second half power comparison
 - Power sustainability metrics
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -26,21 +29,17 @@ class FatigueCalculator(BaseMetricCalculator):
     to quantify fatigue resistance.
     """
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate fatigue resistance metrics.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of fatigue metrics with appropriate prefix
+            Dictionary of fatigue metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
+        df = stream_df
         metrics: dict[str, float] = {}
 
         # Only calculate for activities with power data
@@ -56,13 +55,10 @@ class FatigueCalculator(BaseMetricCalculator):
         half_comparison = self._calculate_half_comparison(df)
         sustainability = self._calculate_power_sustainability(df)
 
-        # Add all metrics with prefix
-        for key, value in {
-            **fatigue_metrics,
-            **half_comparison,
-            **sustainability,
-        }.items():
-            metrics[f"{prefix}{key}"] = value
+        # Combine all metrics
+        metrics.update(fatigue_metrics)
+        metrics.update(half_comparison)
+        metrics.update(sustainability)
 
         return metrics
 

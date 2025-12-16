@@ -77,32 +77,29 @@ class TestTimeWeightedMean:
         expected = (300 * 10 + 300 * 10 + 0 * 50 + 300 * 10) / (10 + 10 + 50 + 10)
         assert result == pytest.approx(expected, rel=1e-2)
 
-    def test_time_weighted_with_gaps_clipping(self, settings_with_ftp: Settings):
-        """Test that clip_gaps prevents large deltas from dominating."""
+    def test_time_weighted_with_gaps(self, settings_with_ftp: Settings):
+        """Test time-weighted mean handles gaps in time data.
+
+        NOTE: In the new architecture, data is pre-split into raw/moving DataFrames
+        upstream. Moving data has contiguous time (via np.arange), so gap handling
+        is less critical. This test validates basic gap behavior in raw data.
+        """
         calculator = MockCalculator(settings_with_ftp)
 
-        # Simulate filtered data with gaps (moving=True filtered out stopped periods)
+        # Simulate data with gaps
         stream = pd.DataFrame(
             {
-                "time": [0, 1, 2, 52, 53, 54],  # 50-second gap from filtering
+                "time": [0, 1, 2, 52, 53, 54],  # 50-second gap
                 "watts": [200, 250, 300, 200, 250, 300],
             }
         )
 
-        # Without clipping: gap delta of 50 would heavily weight the value
-        result_no_clip = calculator._time_weighted_mean(
-            stream["watts"], stream, clip_gaps=False
-        )
+        # Time-weighted mean should still work with gaps
+        result = calculator._time_weighted_mean(stream["watts"], stream)
 
-        # With clipping: gap delta capped at 2 seconds
-        result_clipped = calculator._time_weighted_mean(
-            stream["watts"], stream, clip_gaps=True
-        )
-
-        # Clipped version should have higher average (less weight on pre-gap value)
-        assert result_clipped != result_no_clip
-        # The exact values depend on implementation, but clipping should reduce
-        # gap impact
+        # Result should be finite and reasonable
+        assert result > 0
+        assert result < 500  # Sanity check
 
     def test_empty_series(self, settings_with_ftp: Settings):
         """Test time-weighted mean of empty series."""
@@ -152,20 +149,21 @@ class TestTimeDeltas:
         assert deltas.iloc[3] == 5.0
         assert deltas.iloc[4] == 10.0
 
-    def test_time_deltas_with_gap_clipping(self, settings_with_ftp: Settings):
-        """Test that large gaps are clipped when requested."""
+    def test_time_deltas_with_large_gap(self, settings_with_ftp: Settings):
+        """Test time deltas with large gaps in data.
+
+        NOTE: In the new architecture, data is pre-split into raw/moving DataFrames
+        upstream. Moving data has contiguous time (via np.arange), so gap clipping
+        is no longer needed. This test validates basic gap handling in raw data.
+        """
         calculator = MockCalculator(settings_with_ftp)
 
         stream = pd.DataFrame({"time": [0, 1, 100]})  # 99-second gap
 
-        deltas_no_clip = calculator._calculate_time_deltas(stream, clip_gaps=False)
-        deltas_clipped = calculator._calculate_time_deltas(stream, clip_gaps=True)
+        deltas = calculator._calculate_time_deltas(stream)
 
-        # Without clipping, gap is preserved
-        assert deltas_no_clip.iloc[2] == 99.0
-
-        # With clipping, gap is capped at GAP_DETECTION_THRESHOLD (2 seconds)
-        assert deltas_clipped.iloc[2] == 2.0
+        # Gap is preserved without clipping (as expected for raw data)
+        assert deltas.iloc[2] == 99.0
 
     def test_time_deltas_negative_handling(self, settings_with_ftp: Settings):
         """Test that negative time deltas are handled (defensive test)."""
@@ -236,73 +234,9 @@ class TestTotalDuration:
         assert duration == 0.0
 
 
-class TestFilterMoving:
-    """Test moving data filtering."""
-
-    def test_filter_moving_only(self, settings_with_ftp: Settings):
-        """Test filtering to moving-only data."""
-        calculator = MockCalculator(settings_with_ftp)
-
-        stream = pd.DataFrame(
-            {
-                "time": [0, 1, 2, 3, 4],
-                "watts": [200, 200, 0, 200, 200],
-                "moving": [True, True, False, True, True],
-            }
-        )
-
-        filtered = calculator._filter_moving(stream, moving_only=True)
-
-        assert len(filtered) == 4
-        assert all(filtered["moving"])
-
-    def test_filter_no_filter_when_false(self, settings_with_ftp: Settings):
-        """Test no filtering when moving_only=False."""
-        calculator = MockCalculator(settings_with_ftp)
-
-        stream = pd.DataFrame(
-            {
-                "time": [0, 1, 2, 3, 4],
-                "watts": [200, 200, 0, 200, 200],
-                "moving": [True, True, False, True, True],
-            }
-        )
-
-        filtered = calculator._filter_moving(stream, moving_only=False)
-
-        assert len(filtered) == 5
-
-    def test_filter_missing_moving_column(self, settings_with_ftp: Settings):
-        """Test filtering when moving column is missing."""
-        calculator = MockCalculator(settings_with_ftp)
-
-        stream = pd.DataFrame(
-            {
-                "time": [0, 1, 2],
-                "watts": [200, 250, 300],
-            }
-        )
-
-        filtered = calculator._filter_moving(stream, moving_only=True)
-
-        # Should return all data if moving column missing
-        assert len(filtered) == 3
-
-
-class TestGetPrefix:
-    """Test metric name prefix generation."""
-
-    def test_prefix_raw(self, settings_with_ftp: Settings):
-        """Test prefix for raw metrics."""
-        calculator = MockCalculator(settings_with_ftp)
-        prefix = calculator._get_prefix(moving_only=False)
-        assert prefix == "raw_"
-
-    def test_prefix_moving(self, settings_with_ftp: Settings):
-        """Test prefix for moving metrics."""
-        calculator = MockCalculator(settings_with_ftp)
-        prefix = calculator._get_prefix(moving_only=True)
-        assert prefix == "moving_"
+# NOTE: TestFilterMoving and TestGetPrefix classes have been removed.
+# The new architecture pre-splits data into raw/moving DataFrames upstream
+# using StreamSplitter, so these methods are no longer needed in the calculators.
 
 
 class TestTimeWeightedEdgeCases:
