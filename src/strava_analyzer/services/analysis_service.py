@@ -484,8 +484,8 @@ class AnalysisService:
         df[date_col] = pd.to_datetime(df[date_col], format='ISO8601', utc=True)
         df = df.sort_values(date_col, ascending=True).reset_index(drop=True)
 
-        # Get CP window from constants (default 90 days)
-        cp_window_days = TrainingLoadWindows.CP_WINDOW_DAYS
+        # Get CP window from settings (configurable), fall back to constant if not set
+        cp_window_days = getattr(self.settings, 'cp_window_days', TrainingLoadWindows.CP_WINDOW_DAYS)
 
         # Map column names to durations (in seconds)
         col_to_duration = {}
@@ -529,11 +529,12 @@ class AnalysisService:
                         mmp_data.append((duration_sec, float(max_power)))
 
             # Need at least 3 points for meaningful curve fitting
+            # (Note: estimate_cp_wprime also filters for durations >= 2 min)
             if len(mmp_data) < 3:
                 continue
 
-            # Fit CP model
-            result = estimate_cp_wprime(mmp_data)
+            # Fit CP model with FTP hint for better initial guess
+            result = estimate_cp_wprime(mmp_data, ftp=self.settings.ftp)
 
             cp_values[i] = result["cp"]
             w_prime_values[i] = result["w_prime"]

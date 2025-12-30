@@ -236,14 +236,16 @@ cp: 250
 #   * Endurance riders: 15-20 kJ
 #   * All-rounders: 20-25 kJ
 # Set to 0 to disable W' balance calculations
-w_prime: 20000
+w_prime: 13000
+
+# Rolling window for CP/W' model estimation (days)
+# Looks back this many days to find peak efforts for Critical Power modeling
+# Recommended: 365 days for stable estimate, 90 days for recent form tracking
+cp_window_days: 365
 
 # Power curve modeling configuration
 # These settings define how the CP model is fitted to your data
 power_curve_model:
-  # Rolling window for finding peak efforts
-  rolling_window_days: 90  # Look at last 90 days of data
-
   # Durations to include in CP model (seconds)
   # Longer durations = more aerobic, shorter = more anaerobic
   # Used to generate power-duration curve and estimate CP model

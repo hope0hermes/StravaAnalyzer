@@ -233,6 +233,10 @@ class Settings(BaseSettings):
         "1hr": 3600,
     }
 
+    # --- Power Curve Model Configuration ---
+    # Rolling window for CP/W' estimation (days)
+    cp_window_days: int = 90  # Look back this many days to find peak efforts for CP model
+
     # --- Running Metrics Configuration ---
     fthr: float = 170  # Default FTHR, should be overridden by user
     lt1_hr: float | None = None  # Lactate Threshold 1 HR (lower threshold, from stress test)
