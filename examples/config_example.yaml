@@ -218,16 +218,35 @@ efficiency:
 
 
 # ============================================================================
-# SECTION 8: CRITICAL POWER MODELING
+# SECTION 8: CRITICAL POWER & POWER CURVE MODELING
 # ============================================================================
-# Configuration for CP/W' anaerobic capacity modeling.
+# Critical Power and W-prime configuration for anaerobic capacity analysis
 
-critical_power:
+# Critical Power in watts (required for W' balance calculation)
+# Typically 85-90% of your FTP
+# - Example: If FTP=285W, CP ≈ 250-260W
+# - For testing: 20-minute power test × 0.90
+# Set to 0 to disable W' balance calculations
+cp: 250
+
+# W-prime (anaerobic work capacity) in joules
+# The energy reserve above Critical Power
+# Typical range: 15,000-30,000 joules (15-30 kJ)
+#   * Sprinters: 20-30 kJ
+#   * Endurance riders: 15-20 kJ
+#   * All-rounders: 20-25 kJ
+# Set to 0 to disable W' balance calculations
+w_prime: 20000
+
+# Power curve modeling configuration
+# These settings define how the CP model is fitted to your data
+power_curve_model:
   # Rolling window for finding peak efforts
   rolling_window_days: 90  # Look at last 90 days of data
 
   # Durations to include in CP model (seconds)
   # Longer durations = more aerobic, shorter = more anaerobic
+  # Used to generate power-duration curve and estimate CP model
   durations:
     - 300    # 5 minutes
     - 600    # 10 minutes

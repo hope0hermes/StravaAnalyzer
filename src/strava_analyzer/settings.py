@@ -240,6 +240,11 @@ class Settings(BaseSettings):
     ftpace: float = 5.0  # Default FTPace in min/km, should be overridden by user
     ftp: float = 285  # Default FTP in watts, should be overridden by user
 
+    # --- Critical Power & Anaerobic Capacity ---
+    # Used for W' balance calculations and anaerobic capacity modeling
+    cp: float = 0.0  # Critical Power in watts (0 = disabled). Estimate: FTP × 0.88
+    w_prime: float = 0.0  # W-prime (anaerobic capacity) in joules (0 = disabled). Typical: 20,000 J
+
     # --- Cycling Power Lactate Thresholds (from stress test) ---
     lt1_power: float | None = None  # Power at LT1 (lower threshold), from stress test
     lt2_power: float | None = None  # Power at LT2 (upper threshold), from stress test
