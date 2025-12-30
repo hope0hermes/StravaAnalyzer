@@ -1,6 +1,28 @@
 # StravaAnalyzer Metrics Documentation
 
-This document provides a detailed explanation of the various metrics calculated by the `StravaAnalyzer` package. These metrics are designed to help athletes and coaches gain deeper insights into performance, training load, and physiological adaptations from Strava activity data.
+Complete reference for all metrics calculated by StravaAnalyzer. This document covers metric definitions, interpretation guidelines, calculation methods, and physiological significance.
+
+**Last Updated:** December 21, 2025
+**Scope:** All per-activity and longitudinal metrics, including 11 new advanced/climbing metrics
+
+---
+
+## Quick Start: The Metric System
+
+**Two metrics for every metric:**
+- **`raw_*` metrics**: Include all recorded data (stops, traffic lights, etc.)
+- **`moving_*` metrics**: Exclude stopped periods, representing true riding intensity
+
+Why both? A coffee stop doesn't improve your fitness but does reduce total work. Both perspectives matter!
+
+**Example:**
+```
+Activity: 1-hour ride with 10-minute stop
+- raw_average_power = 150W (total work / total time, including stop)
+- moving_average_power = 165W (total work / riding time only)
+- raw_tss = 80 (TSS including the stop)
+- moving_tss = 90 (TSS only from riding)
+```
 
 ---
 
@@ -499,6 +521,170 @@ Critical Power (CP) and W' (W-prime) model the power-duration relationship, enab
   - **Advantages**: AEI is more stable than absolute W' when tracking body composition changes
   - **Normalization**: Similar to power-to-weight (W/kg) but for anaerobic capacity
 
+---
+
+## NEW: Advanced Power Metrics
+
+### Time Above 90% FTP
+
+- **Metric**: `time_above_90_ftp` / `moving_time_above_90_ftp`
+- **Units**: Seconds
+- **Description**: Total time spent above 90% of FTP (VO2max zone)
+- **Calculation**: Counts seconds where `power > 0.9 × FTP`
+- **Significance**: Measures specific VO2max stimulus time
+- **Interpretation**:
+  - **0-5 min**: Recovery/endurance ride
+  - **5-15 min**: Moderate VO2max stimulus
+  - **15-30 min**: Significant VO2max work
+  - **>30 min**: Very hard VO2max session
+
+### Sweet Spot Time
+
+- **Metric**: `time_sweet_spot` / `moving_time_sweet_spot`
+- **Units**: Seconds
+- **Description**: Time in sweet spot range (88-94% of FTP)
+- **Calculation**: Counts seconds where `0.88 × FTP <= power <= 0.94 × FTP`
+- **Significance**: Optimal training intensity for FTP development
+- **Interpretation**:
+  - **0-20 min**: Minimal sweet spot work
+  - **20-60 min**: Good sweet spot volume
+  - **60-120 min**: Long sweet spot session
+  - **>120 min**: Extended sweet spot endurance
+
+### W' Balance Minimum
+
+- **Metric**: `w_prime_balance_min` / `moving_w_prime_balance_min`
+- **Units**: Joules (J)
+- **Description**: Minimum W' balance reached during ride (lowest point)
+- **Calculation**: Tracks W' depletion/recovery using Skiba model, records minimum
+- **Requires**: CP and W' values from settings or prior computation
+- **Significance**: Shows how close you came to total anaerobic exhaustion
+- **Interpretation**:
+  - **>50% W'**: Easy ride, minimal anaerobic stress
+  - **25-50% W'**: Moderate anaerobic demands
+  - **10-25% W'**: High anaerobic stress
+  - **<10% W'**: Near complete depletion (matches, sprints)
+
+### Match Burn Count
+
+- **Metric**: `match_burn_count` / `moving_match_burn_count`
+- **Units**: Count (integer)
+- **Description**: Number of significant W' expenditures (>50% depletion)
+- **Calculation**: Counts how many times W' drops below 50% threshold
+- **Requires**: CP and W' values
+- **Significance**: Quantifies hard efforts/attacks during the ride
+- **Interpretation**:
+  - **0-2 matches**: Steady ride, few surges
+  - **3-5 matches**: Typical interval workout or hilly ride
+  - **6-10 matches**: Many hard efforts (crit, group ride)
+  - **>10 matches**: Very dynamic ride (criterium racing)
+
+### Negative Split Index
+
+- **Metric**: `negative_split_index` / `moving_negative_split_index`
+- **Units**: Ratio (dimensionless)
+- **Description**: Pacing analysis comparing 2nd half NP to 1st half NP
+- **Formula**: `negative_split_index = NP_second_half / NP_first_half`
+- **Calculation**: Splits ride at midpoint, calculates NP for each half
+- **Significance**: Shows whether you faded or built power through ride
+- **Interpretation**:
+  - **<0.95**: Strong negative split (built power)
+  - **0.95-1.05**: Even pacing
+  - **1.05-1.15**: Slight fade
+  - **>1.15**: Significant fade (poor pacing or fatigue)
+
+### Cardiac Drift
+
+- **Metric**: `cardiac_drift` / `moving_cardiac_drift`
+- **Units**: Percentage (%)
+- **Description**: Efficiency Factor drift from 1st half to 2nd half
+- **Formula**: `drift = ((EF_second - EF_first) / EF_first) × 100`
+- **Calculation**: Splits ride at midpoint, calculates EF for each half, compares
+- **Requires**: Both power and heart rate data (minimum 10 minutes)
+- **Significance**: Indicator of cardiovascular fitness and aerobic efficiency
+- **Interpretation**:
+  - **>-3%**: Excellent aerobic fitness
+  - **-3% to -5%**: Good fitness, well-hydrated
+  - **-5% to -8%**: Moderate drift, possible dehydration
+  - **<-8%**: Poor aerobic fitness or significant fatigue
+- **Note**: Negative values indicate fatigue/dehydration (EF decreasing). Positive values (rare) indicate warm-up effect.
+
+### Estimated FTP
+
+- **Metric**: `estimated_ftp` / `moving_estimated_ftp`
+- **Units**: Watts (W)
+- **Description**: FTP estimate from best 20-minute power in this ride
+- **Formula**: `estimated_ftp = best_20min_power × 0.95`
+- **Calculation**: Finds best rolling 20-min average, applies 95% factor
+- **Significance**: Can track FTP progression ride-to-ride
+- **Interpretation**:
+  - Compare to configured FTP to see if update needed
+  - Rising estimates indicate improving fitness
+  - Requires rides >20 minutes with sustained effort
+
+---
+
+## NEW: Climbing Metrics
+
+### VAM (Velocità Ascensionale Media)
+
+- **Metric**: `vam` / `moving_vam`
+- **Units**: Meters per hour (m/h)
+- **Description**: Vertical ascent rate - the gold standard for climbing performance
+- **Formula**: `VAM = (total_elevation_gain / climbing_time) × 3600`
+- **Calculation**: Sums positive elevation changes, divides by time spent climbing
+- **Significance**: Power-independent climbing metric, used in pro cycling
+- **Interpretation**:
+  - **<800 m/h**: Recreational pace
+  - **800-1000 m/h**: Strong amateur
+  - **1000-1200 m/h**: Cat 2-3 racer
+  - **1200-1400 m/h**: Cat 1 / Pro domestic
+  - **1400-1600 m/h**: Pro continental
+  - **>1600 m/h**: World Tour climber
+
+### Climbing Time
+
+- **Metric**: `climbing_time` / `moving_climbing_time`
+- **Units**: Seconds
+- **Description**: Total time spent climbing (positive gradient)
+- **Calculation**: Counts seconds where altitude is increasing
+- **Significance**: Quantifies climbing volume in the ride
+- **Interpretation**:
+  - Shows what % of ride was spent climbing
+  - Useful for route characterization
+  - Compare to flat/rolling rides
+
+### Climbing Power
+
+- **Metric**: `climbing_power` / `moving_climbing_power`
+- **Units**: Watts (W)
+- **Description**: Average power on significant climbs (gradients >4%)
+- **Calculation**: Mean power where `gradient > 4%`
+- **Requires**: Grade stream data and power meter
+- **Significance**: Shows sustained climbing strength
+- **Interpretation**:
+  - Compare to overall average power
+  - Higher climbing power = good at sustained efforts
+  - Track improvements in climbing-specific power
+
+### Climbing Power per Kilogram
+
+- **Metric**: `climbing_power_per_kg` / `moving_climbing_power_per_kg`
+- **Units**: Watts per kilogram (W/kg)
+- **Description**: Weight-normalized climbing power
+- **Formula**: `climbing_power_per_kg = climbing_power / rider_weight_kg`
+- **Requires**: Configured rider weight
+- **Significance**: THE key metric for climbing performance
+- **Interpretation**:
+  - **<3.0 W/kg**: Recreational
+  - **3.0-3.5 W/kg**: Strong amateur
+  - **3.5-4.0 W/kg**: Cat 2-3 racer
+  - **4.0-4.5 W/kg**: Cat 1 / Pro domestic
+  - **4.5-5.5 W/kg**: Pro continental
+  - **>5.5 W/kg**: World Tour climber
+
+---
+
 ### Power Curve (Maximum Mean Powers)
 
 - **Metrics**: `power_curve_5sec`, `power_curve_10sec`, ..., `power_curve_1hr`
@@ -555,4 +741,214 @@ For complete details, see `src/strava_analyzer/constants.py` and `docs/ADR_005_T
 
 ---
 
+## Implementation Details
 
+### New Metrics (December 2025)
+
+The following 11 new metrics were added to support enhanced dashboard analysis:
+
+**Advanced Power Metrics (7):**
+- Time Above 90% FTP
+- Sweet Spot Time
+- W' Balance Minimum
+- Match Burn Count
+- Negative Split Index
+- Cardiac Drift
+- Estimated FTP
+
+**Climbing Metrics (4):**
+- VAM (Velocità Ascensionale Media)
+- Climbing Time
+- Climbing Power
+- Climbing Power per kg
+
+All new metrics are:
+- Available in both `raw_` and `moving_` variants
+- Integrated into the main metrics pipeline
+- Documented with interpretation guidelines
+- Tested and validated with synthetic data
+
+### Integration Points
+
+**Calculator Modules:**
+- `src/strava_analyzer/metrics/advanced_power.py` - AdvancedPowerCalculator
+- `src/strava_analyzer/metrics/climbing.py` - ClimbingCalculator
+
+**Pipeline Integration:**
+- Both calculators initialized in `MetricsCalculator.__init__()`
+- Automatically called in `compute_all_metrics()` for cycling activities
+- Seamlessly integrated with existing metrics
+
+**Requirements:**
+- Advanced Power: FTP setting, power stream data
+- Climbing: Altitude stream data, optional grade/power data
+- Both: rider_weight_kg for normalized metrics
+
+---
+
+## Quick Reference Tables
+
+### Metric Categories
+
+| Category | Metric Count | Raw/Moving | Per-Activity |
+|----------|--------------|-----------|--------------|
+| Basic Power | 4 | ✓ | ✓ |
+| Heart Rate | 3 | ✓ | ✓ |
+| Efficiency | 3 | ✓ | ✓ |
+| Training Load | 1 | ✓ | ✓ |
+| Zones (Power) | 7 | ✓ | ✓ |
+| Zones (HR) | 5 | ✓ | ✓ |
+| TID Metrics | 6 | ✓ | ✓ |
+| Fatigue Resistance | 3 | ✓ | ✓ |
+| **Advanced Power (NEW)** | **7** | **✓** | **✓** |
+| **Climbing (NEW)** | **4** | **✓** | **✓** |
+| Longitudinal | 8 | - | ✓ |
+| **Total** | **62** | **40** | **~54** |
+
+### Configuration Checklist
+
+For full functionality, configure these in `settings.yaml` or Settings object:
+
+```yaml
+ftp: 250                          # Required for power zones and all power metrics
+rider_weight_kg: 70               # Required for W/kg calculations
+lthr: 165                         # Required for HR zones
+cp: null                          # Optional, computed from 90-day data
+w_prime: null                     # Optional, computed from 90-day data
+```
+
+### Finding Metrics in Code
+
+| Need | Location |
+|------|----------|
+| All metric names | `src/strava_analyzer/constants.py` - `METRIC_NAMES` |
+| Calculator class | `src/strava_analyzer/metrics/` - `*_calculator.py` |
+| New metrics source | `src/strava_analyzer/metrics/advanced_power.py` and `climbing.py` |
+| Integration point | `src/strava_analyzer/metrics/calculators.py` - `MetricsCalculator.compute_all_metrics()` |
+| Constants/thresholds | `src/strava_analyzer/constants.py` |
+
+---
+
+## Interpretation Quick Start
+
+### Power Metrics
+
+**Average Power vs Normalized Power:**
+- Avg Power: Simple time-weighted mean
+- NP: Accounts for intensity variations (harder to maintain variable power)
+- NP is always ≥ Avg Power
+- Use NP for TSS and training load
+
+**Intensity Factor (IF):**
+- IF = NP / FTP
+- 0.5-0.6: Easy/recovery
+- 0.75-0.85: Endurance
+- 0.9-1.05: Threshold
+- >1.05: VO2max and above
+
+**Training Stress Score (TSS):**
+- <100: Recoveryride
+- 100-150: Moderate
+- 150-300: Hard/workout
+- >300: Very hard/racing
+
+### New Advanced Metrics
+
+**Time Above 90% FTP:**
+- Measures VO2max training stimulus
+- 0-5 min: Light session
+- 5-15 min: Good stimulus
+- 15-30 min: Significant workout
+- >30 min: Hard VO2max session
+
+**W' Balance Minimum:**
+- Percentage of W' depleted
+- >50%: Minimal anaerobic stress
+- 10-50%: Moderate stress
+- <10%: Severe depletion (matches/sprints)
+
+**Cardiac Drift:**
+- Power:HR change from 1st to 2nd half
+- <3%: Excellent aerobic fitness
+- 3-5%: Good fitness
+- 5-8%: Moderate drift
+- >8%: Poor fitness or significant fatigue
+
+**VAM (Climbing):**
+- <800 m/h: Recreational
+- 800-1000 m/h: Strong amateur
+- 1000-1200 m/h: Cat 2-3 racer
+- 1200-1400 m/h: Cat 1 / Pro domestic
+- >1600 m/h: World Tour climber
+
+### Training Load (Longitudinal)
+
+**ATL (Acute Training Load, 7-day window):**
+- <30: Well recovered
+- 30-60: Normal fatigue
+- >60: High fatigue, consider recovery
+
+**CTL (Chronic Training Load, 42-day window):**
+- <50: Low fitness
+- 50-100: Base fitness
+- >100: Peak fitness
+
+**TSB (Training Stress Balance = CTL - ATL):**
+- >15: Fresh, ready for peak
+- (-10) to 15: Productive training zone
+- (-30) to (-10): Fatigued but productive
+- <-30: Overreached, needs recovery
+
+**ACWR (Acute:Chronic Ratio = ATL / CTL):**
+- <0.8: Undertraining
+- 0.8-1.3: Optimal
+- >1.3: High injury risk
+
+---
+
+## File Locations
+
+| What | Where |
+|------|-------|
+| This document | `docs/METRICS.md` |
+| Metric calculator code | `src/strava_analyzer/metrics/` |
+| Constants | `src/strava_analyzer/constants.py` |
+| Implementation plan | `../dev_docs/DASHBOARD_METRICS_IMPLEMENTATION_PLAN.md` |
+| Data structure spec | `../ActivitiesViewer/docs/DATA_STRUCTURE.md` |
+| Architecture decisions | `docs/ADR_*.md` |
+
+---
+
+## Common Questions
+
+**Q: Why do my raw and moving metrics differ?**
+A: Stopped periods (traffic lights, coffee stops) are included in raw metrics but excluded from moving. Moving metrics show true riding intensity.
+
+**Q: How is time-weighted averaging different?**
+A: It weights each data point by the duration it represents, not by point count. Critical for accurate metrics with variable recording rates or gaps.
+
+**Q: When should I update my FTP?**
+A: When `estimated_ftp` from rides consistently exceeds your current setting by 5+ watts, or when your CTL increases significantly.
+
+**Q: What's the minimum activity duration for reliable metrics?**
+A: 20+ minutes for most metrics. Decoupling/cardiac drift needs 60+ minutes to be meaningful.
+
+**Q: Can I compare my metrics to others?**
+A: Use normalized metrics (W/kg, IF, hrTSS) rather than absolute values for fair comparisons across different athletes.
+
+**Q: Why is my VAM lower when climbing?**
+A: VAM depends on gradient and elevation gain, not power. A steady climb will have lower VAM than a steep climb at the same speed.
+
+---
+
+## Support and Documentation
+
+- **Metric calculations**: See source code in `src/strava_analyzer/metrics/`
+- **Configuration**: Edit `settings.yaml` or configure via Python Settings object
+- **Architecture**: See `docs/ADR_*.md` for design decisions
+- **Time-weighted averaging**: See `docs/ADR_005_TIME_WEIGHTED_AVERAGING.md` for technical details
+- **Issues**: Check calculator classes for default values when stream data is unavailable
+
+---
+
+**Note:** This document consolidates METRICS.md, METRICS_GUIDE.md, and NEW_METRICS_SUMMARY.md (previous separate files). All information is now in this single comprehensive reference.

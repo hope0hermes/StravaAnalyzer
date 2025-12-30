@@ -15,7 +15,9 @@ import numpy as np
 import pandas as pd
 
 from ..settings import Settings
+from .advanced_power import AdvancedPowerCalculator
 from .basic import BasicMetricsCalculator
+from .climbing import ClimbingCalculator
 from .efficiency import EfficiencyCalculator
 from .fatigue import FatigueCalculator
 from .heartrate import HeartRateCalculator
@@ -46,6 +48,8 @@ class MetricsCalculator:
         """
         self.settings = settings
         self.power_calculator = PowerCalculator(settings)
+        self.advanced_power_calculator = AdvancedPowerCalculator(settings)
+        self.climbing_calculator = ClimbingCalculator(settings)
         self.hr_calculator = HeartRateCalculator(settings)
         self.efficiency_calculator = EfficiencyCalculator(settings)
         self.pace_calculator = PaceCalculator(settings)
@@ -86,6 +90,16 @@ class MetricsCalculator:
             if is_cycling:
                 power_metrics = self.power_calculator.calculate(stream_df)
                 all_metrics.update(power_metrics)
+
+                # Advanced power metrics (W' balance, time in zones, etc.)
+                advanced_power_metrics = self.advanced_power_calculator.calculate(
+                    stream_df
+                )
+                all_metrics.update(advanced_power_metrics)
+
+                # Climbing metrics (VAM, climbing power)
+                climbing_metrics = self.climbing_calculator.calculate(stream_df)
+                all_metrics.update(climbing_metrics)
 
                 # Power curve (MMP) metrics - only if requested
                 if include_power_curve:
