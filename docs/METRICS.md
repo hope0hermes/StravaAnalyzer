@@ -60,7 +60,7 @@ Time-weighted averaging affects:
 - **Efficiency Factor**: Uses time-weighted averages for both power and HR
 - **Variability Index**: Uses time-weighted average power
 
-For more technical details, see `docs/ADR_005_TIME_WEIGHTED_AVERAGING.md`.
+For more technical details, see `docs/ADR_002_TIME_WEIGHTED_AVERAGING.md`.
 
 ---
 
@@ -160,10 +160,16 @@ Some metrics represent absolute values or aggregate statistics that don't change
 - **Significance:** An increasing EF over time for similar efforts can indicate improved aerobic fitness. Time-weighted averaging ensures accurate EF even with variable data quality. Moving EF is typically more representative of actual riding efficiency.
 
 ### Power:Heart Rate Decoupling
-- **Description:** Power:Heart Rate Decoupling measures the percentage change in the power-to-heart rate ratio from the first half to the second half of a steady-state effort. A significant decrease can indicate fatigue or dehydration.
+- **Description:** Power:Heart Rate Decoupling measures the percentage change in Efficiency Factor (power/HR ratio) from the first half to the second half of a steady-state effort. A significant decrease indicates fatigue as power output drops relative to heart rate.
 - **Variants:** `raw_power_hr_decoupling` and `moving_power_hr_decoupling`
-- **Calculation:** `((EF_second_half - EF_first_half) / EF_first_half) * 100`. Negative values indicate decoupling (fatigue).
-- **Significance:** Useful for assessing endurance fitness and identifying signs of fatigue during long efforts. Requires minimum 1-hour duration for meaningful results.
+- **Calculation:** `((EF_second_half - EF_first_half) / EF_first_half) * 100`. Negative values indicate decoupling (power dropping relative to HR).
+- **Interpretation:**
+  - **>-3%**: Excellent aerobic fitness
+  - **-3% to -5%**: Good fitness
+  - **-5% to -8%**: Moderate decoupling
+  - **<-8%**: Significant decoupling or fatigue
+- **Significance:** Assesses aerobic efficiency and endurance fitness during long efforts. Requires minimum 1-hour duration for meaningful results.
+- **Note:** This is different from cardiac_drift which only tracks HR changes without considering power output.
 
 ### Variability Index (VI)
 - **Description:** Variability Index is the ratio of Normalized Power to average power.
@@ -315,30 +321,32 @@ These metrics quantify an athlete's ability to sustain power output over time, i
 
 ### Fatigue Index
 - **Metric:** `fatigue_index`
-- **Formula:** `FI = ((Initial_5min_power - Final_5min_power) / Initial_5min_power) × 100`
+- **Formula:** `FI = ((First_half_power - Second_half_power) / First_half_power) × 100`
 - **Variants:** Both `raw_` and `moving_` prefixed versions
 - **Calculation Details:**
-  - Compares first 5 minutes of power to last 5 minutes
-  - Only calculated for activities > 1 hour
-  - Excludes zero and very low power values
+  - Compares average power of first half to second half
+  - Same calculation as power_drift but always positive (represents magnitude of power loss)
+  - Minimum 2 minutes of data required
 - **Significance:**
   - **0-5%**: Excellent pacing, minimal fatigue
   - **5-15%**: Good pacing, normal fatigue
   - **15-25%**: Moderate fatigue, possible pacing issues
   - **>25%**: High fatigue or poor pacing strategy
-- **Related metrics:** `initial_5min_power`, `final_5min_power`
+- **Note:** This is the absolute value of power_drift - it represents power fade magnitude regardless of direction
+- **Related metrics:** `first_half_power`, `second_half_power`, `power_drift`
 
-### Power Drop Percentage
-- **Metric:** `power_drop_percentage`
-- **Formula:** `((First_half_power - Second_half_power) / First_half_power) × 100`
+### Power Drift
+- **Metric:** `power_drift`
+- **Formula:** `((Second_half_power - First_half_power) / First_half_power) × 100`
 - **Variants:** Both `raw_` and `moving_` prefixed versions
-- **Description:** Percentage decrease in power from first half to second half of activity
+- **Description:** Percentage change in power from first half to second half of activity
 - **Significance:**
-  - **< 5%**: Excellent sustainability
-  - **5-10%**: Good sustainability
-  - **10-20%**: Moderate fade
-  - **> 20%**: Significant power decay
-- **Related metrics:** `first_half_power`, `second_half_power`, `half_power_ratio`
+  - **> -5%**: Excellent sustainability (minimal power fade or negative split)
+  - **-5% to -10%**: Good pacing
+  - **-10% to -15%**: Moderate fade
+  - **< -15%**: Significant power decay
+- **Note:** Negative values indicate power decreasing (normal fatigue). Positive values indicate negative split (building power throughout ride).
+- **Related metrics:** `first_half_power`, `second_half_power`, `half_power_ratio`, `cardiac_drift`
 
 ### Power Sustainability Index (PSI)
 - **Metric:** `power_sustainability_index`
@@ -596,18 +604,22 @@ Critical Power (CP) and W' (W-prime) model the power-duration relationship, enab
 ### Cardiac Drift
 
 - **Metric**: `cardiac_drift` / `moving_cardiac_drift`
-- **Units**: Percentage (%)
-- **Description**: Efficiency Factor drift from 1st half to 2nd half
-- **Formula**: `drift = ((EF_second - EF_first) / EF_first) × 100`
-- **Calculation**: Splits ride at midpoint, calculates EF for each half, compares
-- **Requires**: Both power and heart rate data (minimum 10 minutes)
-- **Significance**: Indicator of cardiovascular fitness and aerobic efficiency
+- **Supporting Metrics**: `first_half_hr`, `second_half_hr`
+- **Units**: Percentage (%) for drift, BPM for HR values
+- **Description**: Heart rate increase from 1st half to 2nd half (HR-only metric)
+- **Formula**: `drift = ((HR_second - HR_first) / HR_first) × 100`
+- **Calculation**: Splits ride at midpoint, calculates average HR for each half, compares
+- **Requires**: Heart rate data only (minimum 10 minutes)
+- **Significance**: Indicator of cardiovascular strain, hydration status, and aerobic fitness
 - **Interpretation**:
-  - **>-3%**: Excellent aerobic fitness
-  - **-3% to -5%**: Good fitness, well-hydrated
-  - **-5% to -8%**: Moderate drift, possible dehydration
-  - **<-8%**: Poor aerobic fitness or significant fatigue
-- **Note**: Negative values indicate fatigue/dehydration (EF decreasing). Positive values (rare) indicate warm-up effect.
+  - **<3%**: Excellent aerobic fitness and cardiovascular efficiency
+  - **3-5%**: Good fitness, well-adapted
+  - **5-8%**: Moderate drift, monitor hydration
+  - **>8%**: Poor fitness or dehydration/heat stress
+- **Note**: Positive values indicate HR increasing (normal cardiovascular strain). This is different from power:HR decoupling which tracks efficiency factor changes.
+- **Exported values**:
+  - `first_half_hr`: Average heart rate (BPM) during first half of ride
+  - `second_half_hr`: Average heart rate (BPM) during second half of ride
 
 ### Estimated FTP
 
@@ -737,7 +749,7 @@ All thresholds, zone boundaries, and calculation parameters are defined in `src/
 - **Heart Rate Zones**: 5-zone model (percentages of FTHR) or LT-based model if stress test thresholds provided
 - **Validation Thresholds**: Min/max values for power, HR, cadence, velocity
 
-For complete details, see `src/strava_analyzer/constants.py` and `docs/ADR_005_TIME_WEIGHTED_AVERAGING.md`.
+For complete details, see `src/strava_analyzer/constants.py` and `docs/ADR_002_TIME_WEIGHTED_AVERAGING.md`.
 
 ---
 
@@ -946,7 +958,7 @@ A: VAM depends on gradient and elevation gain, not power. A steady climb will ha
 - **Metric calculations**: See source code in `src/strava_analyzer/metrics/`
 - **Configuration**: Edit `settings.yaml` or configure via Python Settings object
 - **Architecture**: See `docs/ADR_*.md` for design decisions
-- **Time-weighted averaging**: See `docs/ADR_005_TIME_WEIGHTED_AVERAGING.md` for technical details
+- **Time-weighted averaging**: See `docs/ADR_002_TIME_WEIGHTED_AVERAGING.md` for technical details
 - **Issues**: Check calculator classes for default values when stream data is unavailable
 
 ---

@@ -542,8 +542,9 @@ class AnalysisService:
 
             # Calculate AEI (Anaerobic Energy Index = W' / body_weight)
             if pd.notna(result["w_prime"]) and rider_weight > 0:
-                # W' is in joules, AEI is typically in J/kg
-                aei_values[i] = result["w_prime"] / rider_weight
+                # W' is in joules, convert to kJ then divide by body weight
+                # AEI is expressed in kJ/kg, typical range 0.2-0.8 kJ/kg
+                aei_values[i] = (result["w_prime"] / 1000.0) / rider_weight
 
         # Assign computed values
         df["cp"] = cp_values

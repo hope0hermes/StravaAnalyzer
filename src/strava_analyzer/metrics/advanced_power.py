@@ -48,11 +48,18 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
 
             # W' balance metrics (if CP model available)
             if hasattr(self.settings, "cp") and hasattr(self.settings, "w_prime"):
+                # Export configured CP/W' values and window for reference
+                metrics["cp_config"] = self.settings.cp
+                metrics["w_prime_config"] = self.settings.w_prime
+                metrics["cp_window_days"] = getattr(self.settings, "cp_window_days", 90)
+
                 w_prime_metrics = self._calculate_w_prime_balance(stream_df)
                 metrics.update(w_prime_metrics)
             else:
                 metrics["w_prime_balance_min"] = 0.0
+                metrics["w_prime_depletion"] = 0.0
                 metrics["match_burn_count"] = 0.0
+                metrics["cp_window_days"] = 0
 
             # Negative split analysis
             negative_split = self._calculate_negative_split_index(stream_df)
@@ -60,10 +67,14 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
 
             # Cardiac drift (requires HR data)
             if "heartrate" in stream_df.columns:
-                cardiac_drift = self._calculate_cardiac_drift(stream_df)
+                cardiac_drift, first_half_hr, second_half_hr = self._calculate_cardiac_drift(stream_df)
                 metrics["cardiac_drift"] = cardiac_drift
+                metrics["first_half_hr"] = first_half_hr
+                metrics["second_half_hr"] = second_half_hr
             else:
                 metrics["cardiac_drift"] = 0.0
+                metrics["first_half_hr"] = 0.0
+                metrics["second_half_hr"] = 0.0
 
             # Estimated FTP from this ride
             estimated_ftp = self._estimate_ftp_from_ride(stream_df)
@@ -81,6 +92,9 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
         """
         Calculate time spent above a power threshold (as % of FTP).
 
+        Uses time-weighted calculation to return actual time in seconds,
+        not just point count.
+
         Args:
             stream_df: DataFrame with watts column
             threshold_pct: Threshold as decimal (e.g., 0.90 for 90% FTP)
@@ -94,13 +108,18 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
         threshold_watts = self.settings.ftp * threshold_pct
         above_threshold = stream_df["watts"] > threshold_watts
 
-        return float(above_threshold.sum())
+        # Time-weighted: sum of time deltas where condition is true
+        time_deltas = self._calculate_time_deltas(stream_df)
+        return float(time_deltas[above_threshold].sum())
 
     def _calculate_time_in_range(
         self, stream_df: pd.DataFrame, lower_pct: float, upper_pct: float
     ) -> float:
         """
         Calculate time spent in a power range (as % of FTP).
+
+        Uses time-weighted calculation to return actual time in seconds,
+        not just point count.
 
         Args:
             stream_df: DataFrame with watts column
@@ -120,7 +139,9 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
             stream_df["watts"] <= upper_watts
         )
 
-        return float(in_range.sum())
+        # Time-weighted: sum of time deltas where condition is true
+        time_deltas = self._calculate_time_deltas(stream_df)
+        return float(time_deltas[in_range].sum())
 
     def _calculate_w_prime_balance(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
@@ -171,6 +192,11 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
         # Find minimum W' balance
         min_w_balance = float(np.min(w_balance))
         metrics["w_prime_balance_min"] = min_w_balance
+
+        # Calculate W' depletion percentage
+        w_prime_depleted = w_prime - min_w_balance
+        depletion_pct = (w_prime_depleted / w_prime) * 100 if w_prime > 0 else 0.0
+        metrics["w_prime_depletion"] = depletion_pct
 
         # Count match burns (drops > 50% of W')
         w_pct_balance = w_balance / w_prime
@@ -235,45 +261,51 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
 
         return float(np_value) if not np.isnan(np_value) else 0.0
 
-    def _calculate_cardiac_drift(self, stream_df: pd.DataFrame) -> float:
+    def _calculate_cardiac_drift(self, stream_df: pd.DataFrame) -> tuple[float, float, float]:
         """
-        Calculate cardiac drift (EF 1st half vs 2nd half).
+        Calculate cardiac drift (HR increase from 1st half to 2nd half).
 
-        Cardiac drift % = (EF_second - EF_first) / EF_first × 100
+        Cardiac drift is a HR-ONLY metric that measures cardiovascular strain:
+        Cardiac drift % = (HR_second - HR_first) / HR_first × 100
 
-        Negative drift = fatigue/dehydration (EF decreasing)
-        Positive drift = warm-up effect (EF improving - rare)
+        Positive drift = HR increasing = cardiovascular strain/dehydration
+        Negative drift = HR decreasing = warm-up effect (rare)
 
-        Consistent with power_hr_decoupling formula.
+        This is different from power_hr_decoupling which uses EF (power/HR ratio).
+
+        Thresholds (more positive = worse):
+        - <3%: Excellent aerobic fitness
+        - 3-5%: Good fitness
+        - 5-8%: Moderate drift
+        - >8%: Poor fitness or dehydration/heat stress
 
         Args:
-            stream_df: DataFrame with watts and heartrate columns
+            stream_df: DataFrame with heartrate column
 
         Returns:
-            Cardiac drift percentage
+            Tuple of (cardiac_drift_pct, first_half_hr, second_half_hr)
         """
         if (
-            "watts" not in stream_df.columns
-            or "heartrate" not in stream_df.columns
+            "heartrate" not in stream_df.columns
             or len(stream_df) < 600  # Need at least 10 min
         ):
-            return 0.0
+            return 0.0, 0.0, 0.0
 
         midpoint = len(stream_df) // 2
 
         first_half = stream_df.iloc[:midpoint]
         second_half = stream_df.iloc[midpoint:]
 
-        # Calculate EF for each half (NP / Avg HR)
-        ef_first = self._calculate_ef_simple(first_half)
-        ef_second = self._calculate_ef_simple(second_half)
+        # Calculate average HR for each half
+        hr_first = first_half["heartrate"].mean()
+        hr_second = second_half["heartrate"].mean()
 
-        if ef_first == 0:
-            return 0.0
+        if hr_first == 0 or pd.isna(hr_first) or pd.isna(hr_second):
+            return 0.0, 0.0, 0.0
 
-        drift_pct = ((ef_second - ef_first) / ef_first) * 100
+        drift_pct = ((hr_second - hr_first) / hr_first) * 100
 
-        return float(drift_pct)
+        return float(drift_pct), float(hr_first), float(hr_second)
 
     def _calculate_ef_simple(self, df: pd.DataFrame) -> float:
         """Calculate simple EF for a segment."""
@@ -328,7 +360,9 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
             "time_above_90_ftp": 0.0,
             "time_sweet_spot": 0.0,
             "w_prime_balance_min": 0.0,
+            "w_prime_depletion": 0.0,
             "match_burn_count": 0.0,
+            "cp_window_days": 0,
             "negative_split_index": 1.0,
             "cardiac_drift": 0.0,
             "estimated_ftp": 0.0,

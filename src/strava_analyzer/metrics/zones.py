@@ -31,7 +31,7 @@ class ZoneCalculator(BaseMetricCalculator):
 
     def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
-        Calculate zone distributions.
+        Calculate zone distributions using time-weighted calculations.
 
         Args:
             stream_df: DataFrame containing activity stream data (pre-split)
@@ -43,28 +43,38 @@ class ZoneCalculator(BaseMetricCalculator):
 
         # Calculate power zones if available
         if "watts" in stream_df.columns and self.settings.ftp > 0:
-            power_zones = self._calculate_power_zones(stream_df["watts"])
+            power_zones = self._calculate_power_zones(stream_df["watts"], stream_df)
             for zone_name, percentage in power_zones.items():
                 metrics[f"{zone_name}_percentage"] = percentage
 
         # Calculate HR zones if available
         if "heartrate" in stream_df.columns and self.settings.fthr > 0:
-            hr_zones = self._calculate_hr_zones(stream_df["heartrate"])
+            hr_zones = self._calculate_hr_zones(stream_df["heartrate"], stream_df)
             for zone_name, percentage in hr_zones.items():
                 metrics[f"{zone_name}_percentage"] = percentage
 
         return metrics
 
-    def _calculate_power_zones(self, power_series: pd.Series) -> dict[str, float]:
-        """Calculate power zone distribution using zones from settings.
+    def _calculate_power_zones(
+        self, power_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
+        """Calculate power zone distribution using time-weighted calculations.
 
         Uses the power zones defined in settings, which can be:
         - LT-based 7-zone model (if lt1_power and lt2_power are configured)
         - Coggan percentage-based 7-zone model (fallback)
-        """
-        total_points = len(power_series)
 
-        if total_points == 0:
+        Time-weighted calculation ensures accurate percentages regardless of
+        variable sampling rates or gaps in the data.
+        """
+        if power_series.empty:
+            return {}
+
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
             return {}
 
         # Use zones from settings (LT-based or percentage-based)
@@ -75,21 +85,32 @@ class ZoneCalculator(BaseMetricCalculator):
             # Convert zone name from settings format (power_zone_1) to output format (power_z1)
             output_name = zone_name.replace("power_zone_", "power_z")
             mask = (power_series >= lower) & (power_series < upper)
-            time_in_zone = mask.sum()
-            zone_percentages[output_name] = (time_in_zone / total_points) * 100
+            # Time-weighted: sum of time deltas where condition is true
+            time_in_zone = time_deltas[mask].sum()
+            zone_percentages[output_name] = (time_in_zone / total_time) * 100
 
         return zone_percentages
 
-    def _calculate_hr_zones(self, hr_series: pd.Series) -> dict[str, float]:
-        """Calculate HR zone distribution using zones from settings.
+    def _calculate_hr_zones(
+        self, hr_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
+        """Calculate HR zone distribution using time-weighted calculations.
 
         Uses the HR zones defined in settings, which can be:
         - LT-based 5-zone model (if lt1_hr and lt2_hr are configured)
         - Percentage-based 5-zone model (fallback)
-        """
-        total_points = len(hr_series)
 
-        if total_points == 0:
+        Time-weighted calculation ensures accurate percentages regardless of
+        variable sampling rates or gaps in the data.
+        """
+        if hr_series.empty:
+            return {}
+
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
             return {}
 
         # Use zones from settings (LT-based or percentage-based)
@@ -100,8 +121,9 @@ class ZoneCalculator(BaseMetricCalculator):
             # Convert zone name from settings format (hr_zone_1) to output format (hr_z1)
             output_name = zone_name.replace("hr_zone_", "hr_z")
             mask = (hr_series >= lower) & (hr_series < upper)
-            time_in_zone = mask.sum()
-            zone_percentages[output_name] = (time_in_zone / total_points) * 100
+            # Time-weighted: sum of time deltas where condition is true
+            time_in_zone = time_deltas[mask].sum()
+            zone_percentages[output_name] = (time_in_zone / total_time) * 100
 
         return zone_percentages
 

@@ -31,7 +31,7 @@ class TIDCalculator(BaseMetricCalculator):
 
     def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
-        Calculate TID metrics.
+        Calculate TID metrics using time-weighted calculations.
 
         Args:
             stream_df: DataFrame containing activity stream data (pre-split)
@@ -43,18 +43,20 @@ class TIDCalculator(BaseMetricCalculator):
 
         # Calculate TID metrics based on available data
         if "watts" in stream_df.columns and self.settings.ftp > 0:
-            power_tid = self._calculate_power_tid(stream_df["watts"])
+            power_tid = self._calculate_power_tid(stream_df["watts"], stream_df)
             metrics.update(power_tid)
 
         if "heartrate" in stream_df.columns and self.settings.fthr > 0:
-            hr_tid = self._calculate_hr_tid(stream_df["heartrate"])
+            hr_tid = self._calculate_hr_tid(stream_df["heartrate"], stream_df)
             metrics.update(hr_tid)
 
         return metrics
 
-    def _calculate_power_tid(self, power_series: pd.Series) -> dict[str, float]:
+    def _calculate_power_tid(
+        self, power_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
         """
-        Calculate TID metrics based on power zones.
+        Calculate TID metrics based on power zones using time-weighted calculations.
 
         Uses 3-zone model:
         - Zone 1 (Low): < 76% FTP (combines Z1 + Z2)
@@ -63,6 +65,7 @@ class TIDCalculator(BaseMetricCalculator):
 
         Args:
             power_series: Power data
+            stream_df: Full DataFrame for time delta calculation
 
         Returns:
             Dictionary of TID metrics
@@ -70,23 +73,34 @@ class TIDCalculator(BaseMetricCalculator):
         if power_series.empty:
             return {}
 
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
+            return {}
+
         ftp = self.settings.ftp
-        total_points = len(power_series)
 
         # 3-zone TID model
         zone1_threshold = 0.76 * ftp  # Low intensity
         zone2_threshold = 0.90 * ftp  # Moderate intensity
 
-        zone1_time = (power_series < zone1_threshold).sum()
-        zone2_time = (
-            (power_series >= zone1_threshold) & (power_series < zone2_threshold)
-        ).sum()
-        zone3_time = (power_series >= zone2_threshold).sum()
+        # Time-weighted zone calculations
+        zone1_mask = power_series < zone1_threshold
+        zone2_mask = (power_series >= zone1_threshold) & (
+            power_series < zone2_threshold
+        )
+        zone3_mask = power_series >= zone2_threshold
+
+        zone1_time = time_deltas[zone1_mask].sum()
+        zone2_time = time_deltas[zone2_mask].sum()
+        zone3_time = time_deltas[zone3_mask].sum()
 
         # Calculate percentages
-        z1_pct = (zone1_time / total_points) * 100
-        z2_pct = (zone2_time / total_points) * 100
-        z3_pct = (zone3_time / total_points) * 100
+        z1_pct = (zone1_time / total_time) * 100
+        z2_pct = (zone2_time / total_time) * 100
+        z3_pct = (zone3_time / total_time) * 100
 
         # Calculate polarization index
         # PI = (Z1 + Z3) / Z2
@@ -106,9 +120,11 @@ class TIDCalculator(BaseMetricCalculator):
             "power_tdr": tdr,
         }
 
-    def _calculate_hr_tid(self, hr_series: pd.Series) -> dict[str, float]:
+    def _calculate_hr_tid(
+        self, hr_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
         """
-        Calculate TID metrics based on heart rate zones.
+        Calculate TID metrics based on heart rate zones using time-weighted calculations.
 
         Uses 3-zone model:
         - Zone 1 (Low): < 82% FTHR (Z1)
@@ -117,6 +133,7 @@ class TIDCalculator(BaseMetricCalculator):
 
         Args:
             hr_series: Heart rate data
+            stream_df: Full DataFrame for time delta calculation
 
         Returns:
             Dictionary of TID metrics
@@ -124,23 +141,32 @@ class TIDCalculator(BaseMetricCalculator):
         if hr_series.empty:
             return {}
 
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
+            return {}
+
         fthr = self.settings.fthr
-        total_points = len(hr_series)
 
         # 3-zone TID model based on HR
         zone1_threshold = HeartRateZoneThresholds.ZONE_1_MAX * fthr  # 82% FTHR
         zone2_threshold = HeartRateZoneThresholds.ZONE_3_MAX * fthr  # 94% FTHR
 
-        zone1_time = (hr_series < zone1_threshold).sum()
-        zone2_time = (
-            (hr_series >= zone1_threshold) & (hr_series < zone2_threshold)
-        ).sum()
-        zone3_time = (hr_series >= zone2_threshold).sum()
+        # Time-weighted zone calculations
+        zone1_mask = hr_series < zone1_threshold
+        zone2_mask = (hr_series >= zone1_threshold) & (hr_series < zone2_threshold)
+        zone3_mask = hr_series >= zone2_threshold
+
+        zone1_time = time_deltas[zone1_mask].sum()
+        zone2_time = time_deltas[zone2_mask].sum()
+        zone3_time = time_deltas[zone3_mask].sum()
 
         # Calculate percentages
-        z1_pct = (zone1_time / total_points) * 100
-        z2_pct = (zone2_time / total_points) * 100
-        z3_pct = (zone3_time / total_points) * 100
+        z1_pct = (zone1_time / total_time) * 100
+        z2_pct = (zone2_time / total_time) * 100
+        z3_pct = (zone3_time / total_time) * 100
 
         # Calculate polarization index
         polarization_index = (z1_pct + z3_pct) / z2_pct if z2_pct > 0 else 0.0

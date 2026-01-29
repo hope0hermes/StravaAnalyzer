@@ -69,6 +69,8 @@ class ClimbingCalculator(BaseMetricCalculator):
 
         VAM = (elevation_gain / climbing_time) * 3600 (m/h)
 
+        Uses time-weighted calculation for accurate climbing time.
+
         Args:
             stream_df: DataFrame with altitude and time columns
 
@@ -87,9 +89,12 @@ class ClimbingCalculator(BaseMetricCalculator):
         if not climbing_mask.any():
             return 0.0, 0.0
 
-        # Calculate total elevation gain and time spent climbing
+        # Calculate total elevation gain
         elevation_gain = df.loc[climbing_mask, "altitude_diff"].sum()
-        climbing_time = climbing_mask.sum()  # Number of seconds climbing
+
+        # Time-weighted climbing time calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        climbing_time = time_deltas[climbing_mask].sum()
 
         if climbing_time == 0:
             return 0.0, 0.0
@@ -105,6 +110,8 @@ class ClimbingCalculator(BaseMetricCalculator):
         """
         Calculate average power on significant climbs (gradient > threshold).
 
+        Uses time-weighted averaging for accurate power calculations.
+
         Args:
             stream_df: DataFrame with grade_smooth and watts columns
 
@@ -117,16 +124,20 @@ class ClimbingCalculator(BaseMetricCalculator):
         if not climbing_mask.any():
             return 0.0, 0.0
 
-        # Get power data during climbs
-        climbing_power_data = stream_df.loc[climbing_mask, "watts"]
+        # Get climbing segment DataFrame
+        climbing_df = stream_df.loc[climbing_mask].copy()
 
         # Filter out zero/invalid power values
-        valid_power = climbing_power_data[climbing_power_data > 0]
-
-        if valid_power.empty:
+        valid_mask = climbing_df["watts"] > 0
+        if not valid_mask.any():
             return 0.0, 0.0
 
-        avg_climbing_power = float(valid_power.mean())
+        valid_climbing_df = climbing_df.loc[valid_mask]
+
+        # Time-weighted average power on climbs
+        avg_climbing_power = self._time_weighted_mean(
+            valid_climbing_df["watts"], valid_climbing_df
+        )
         avg_climbing_power_per_kg = avg_climbing_power / self.settings.rider_weight_kg
 
         return avg_climbing_power, avg_climbing_power_per_kg

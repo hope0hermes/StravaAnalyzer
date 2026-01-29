@@ -18,7 +18,7 @@
 
 # Root directory containing activities.csv and Streams/ folder
 # (from your Strava data export)
-data_dir: "/home/hope0hermes/Workspace/ActivitiesViewer/dev/data"
+data_dir: "/home/hope0hermes/.strava_fetcher/data"
 
 # Processed data output directory
 # (enriched CSV files and summaries will be saved here)

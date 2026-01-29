@@ -152,7 +152,7 @@ def interval_name_from_seconds(seconds: int) -> str:
         seconds: Duration in seconds
 
     Returns:
-        Interval name (e.g., "1min", "5min", "20sec")
+        Interval name (e.g., "1min", "5min", "20sec", "2hr")
     """
     if seconds < 60:
         return f"{seconds}sec"
@@ -172,4 +172,16 @@ def interval_name_from_seconds(seconds: int) -> str:
         return "30min"
     if seconds == 3600:
         return "1hr"
+    if seconds == 5400:
+        return "90min"
+    if seconds == 7200:
+        return "2hr"
+    if seconds == 10800:
+        return "3hr"
+    if seconds == 14400:
+        return "4hr"
+    if seconds == 18000:
+        return "5hr"
+    if seconds == 21600:
+        return "6hr"
     return f"{seconds}sec"  # Fallback for other durations

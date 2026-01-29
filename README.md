@@ -61,10 +61,10 @@ uv run strava-analyzer run --config config.yaml
 
 **Via Python:**
 ```python
-from strava_analyzer.modern_pipeline import ModernPipeline
+from strava_analyzer.pipeline import Pipeline
 from strava_analyzer.settings import Settings
 
-pipeline = ModernPipeline(Settings())
+pipeline = Pipeline(Settings())
 pipeline.run()
 ```
 
@@ -95,8 +95,7 @@ pipeline.run()
 |-----|---------|
 | [**QUICK_START.md**](docs/QUICK_START.md) | Usage examples (Pipeline, Services, CLI, Custom) |
 | [**CONFIGURATION.md**](docs/CONFIGURATION.md) | Configuration options and setup |
-| [**METRICS_GUIDE.md**](docs/METRICS_GUIDE.md) | Detailed metric reference |
-| [**METRICS.md**](docs/METRICS.md) | Complete metric definitions |
+| [**METRICS.md**](docs/METRICS.md) | Complete metric definitions and reference |
 | [**ARCHITECTURE_GUIDE.md**](docs/ARCHITECTURE_GUIDE.md) | System design and layers |
 | [**TESTING_STRATEGY.md**](docs/TESTING_STRATEGY.md) | Testing approach |
 | [**ADR_001_LAYERED_ARCHITECTURE.md**](docs/ADR_001_LAYERED_ARCHITECTURE.md) | Architecture decisions |
@@ -122,8 +121,8 @@ uv run strava-analyzer run --config config.yaml --verbose
 
 ### 2. Pipeline (Easy)
 ```python
-from strava_analyzer.modern_pipeline import ModernPipeline
-pipeline = ModernPipeline(Settings())
+from strava_analyzer.pipeline import Pipeline
+pipeline = Pipeline(Settings())
 pipeline.run()
 ```
 → See [QUICK_START.md](docs/QUICK_START.md#option-1-pipeline-simplest)

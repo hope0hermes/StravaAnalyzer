@@ -231,6 +231,12 @@ class Settings(BaseSettings):
         "20min": 1200,
         "30min": 1800,
         "1hr": 3600,
+        "90min": 5400,
+        "2hr": 7200,
+        "3hr": 10800,
+        "4hr": 14400,
+        "5hr": 18000,
+        "6hr": 21600,
     }
 
     # --- Power Curve Model Configuration ---

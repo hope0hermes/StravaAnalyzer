@@ -44,7 +44,7 @@ class PowerProfile(BaseModel):
     time_to_exhaustion: dict[str, float] | None = Field(
         None, description="Time to exhaustion predictions at various powers"
     )
-    aei: float | None = Field(None, description="Anaerobic Energy Index (W'/kg)")
+    aei: float | None = Field(None, description="Anaerobic Energy Index (kJ/kg)")
 
 
 class ActivityType(str, Enum):

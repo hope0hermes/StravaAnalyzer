@@ -135,6 +135,10 @@ class MetricsCalculator:
             tid_classification = self._calculate_tid_classification(tid_metrics)
             all_metrics.update(tid_classification)
 
+            # Convert zone percentages to actual times (in seconds)
+            # This needs to happen after we have moving_time from _calculate_basic_metrics
+            # So we'll add it after all metrics are collected
+
             # Fatigue resistance (only for activities > 1 hour)
             fatigue_metrics = self.fatigue_calculator.calculate(stream_df)
             all_metrics.update(fatigue_metrics)
@@ -151,6 +155,11 @@ class MetricsCalculator:
 
         # Add basic temporal metrics
         all_metrics.update(self._calculate_basic_metrics(stream_df))
+
+        # Convert zone percentages to actual times (in seconds)
+        # This uses the moving_time from basic metrics
+        zone_times = self._calculate_zone_times(all_metrics)
+        all_metrics.update(zone_times)
 
         return all_metrics
 
@@ -289,3 +298,44 @@ class MetricsCalculator:
             metrics["hr_tid_classification"] = classification
 
         return metrics
+
+    def _calculate_zone_times(self, all_metrics: dict[str, float | str]) -> dict[str, float]:
+        """
+        Convert zone percentages to actual times in seconds.
+
+        This creates separate time metrics (in seconds) from the zone percentage metrics.
+        For example, power_z1_percentage: 25.0 with moving_time: 3600
+        becomes power_z1_time: 900.0 (seconds)
+
+        Args:
+            all_metrics: Dictionary containing all calculated metrics including zone percentages
+                        and moving_time
+
+        Returns:
+            Dictionary of zone time metrics in seconds
+        """
+        zone_times: dict[str, float] = {}
+
+        # Get the base time to use for calculations (moving_time in seconds)
+        base_time = all_metrics.get("moving_time", 0.0)
+
+        if base_time <= 0:
+            return zone_times
+
+        # Power zones (7 zones)
+        for i in range(1, 8):
+            pct_key = f"power_z{i}_percentage"
+            if pct_key in all_metrics and all_metrics[pct_key] is not None:
+                percentage = float(all_metrics[pct_key])
+                time_seconds = (percentage / 100.0) * base_time
+                zone_times[f"power_z{i}_time"] = time_seconds
+
+        # Heart rate zones (5 zones)
+        for i in range(1, 6):
+            pct_key = f"hr_z{i}_percentage"
+            if pct_key in all_metrics and all_metrics[pct_key] is not None:
+                percentage = float(all_metrics[pct_key])
+                time_seconds = (percentage / 100.0) * base_time
+                zone_times[f"hr_z{i}_time"] = time_seconds
+
+        return zone_times

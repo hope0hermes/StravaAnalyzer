@@ -1,4 +1,4 @@
-# ADR 005: Time-Weighted Averaging for Metrics
+# ADR 002: Time-Weighted Averaging for Metrics
 
 **Status**: Implemented
 **Date**: 2025-10-23
