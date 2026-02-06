@@ -1,4 +1,9 @@
-"""Unit tests for Power metrics calculator."""
+"""Unit tests for Power metrics calculator.
+
+NOTE: The new architecture pre-splits data into raw/moving DataFrames upstream
+using StreamSplitter. Calculators receive a single DataFrame and return
+unprefixed metric names. Tests have been updated accordingly.
+"""
 
 import numpy as np
 import pandas as pd
@@ -17,10 +22,10 @@ class TestPowerCalculatorBasics:
         """Test average power calculation with simple stream."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert "raw_average_power" in metrics
-        assert metrics["raw_average_power"] > 0
+        assert "average_power" in metrics
+        assert metrics["average_power"] > 0
 
     def test_max_power_simple(
         self, simple_stream: pd.DataFrame, settings_with_ftp: Settings
@@ -28,10 +33,10 @@ class TestPowerCalculatorBasics:
         """Test max power calculation."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert "raw_max_power" in metrics
-        assert metrics["raw_max_power"] == simple_stream["watts"].max()
+        assert "max_power" in metrics
+        assert metrics["max_power"] == simple_stream["watts"].max()
 
     def test_power_per_kg(
         self, simple_stream: pd.DataFrame, settings_with_ftp: Settings
@@ -39,15 +44,13 @@ class TestPowerCalculatorBasics:
         """Test power per kg calculation."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert "raw_power_per_kg" in metrics
+        assert "power_per_kg" in metrics
         expected_power_per_kg = (
-            metrics["raw_average_power"] / settings_with_ftp.rider_weight_kg
+            metrics["average_power"] / settings_with_ftp.rider_weight_kg
         )
-        assert metrics["raw_power_per_kg"] == pytest.approx(
-            expected_power_per_kg, rel=1e-3
-        )
+        assert metrics["power_per_kg"] == pytest.approx(expected_power_per_kg, rel=1e-3)
 
     def test_zero_power_returns_empty_metrics(self, settings_with_ftp: Settings):
         """Test that zero power data returns empty metrics."""
@@ -61,10 +64,10 @@ class TestPowerCalculatorBasics:
             }
         )
 
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        assert metrics["raw_average_power"] == 0.0
-        assert metrics["raw_normalized_power"] == 0.0
+        assert metrics["average_power"] == 0.0
+        assert metrics["normalized_power"] == 0.0
 
 
 class TestNormalizedPower:
@@ -76,11 +79,11 @@ class TestNormalizedPower:
         """Test NP calculation with realistic interval stream."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(realistic_stream, moving_only=False)
+        metrics = calculator.calculate(realistic_stream)
 
         # NP should be higher than average power for interval workouts
-        assert metrics["raw_normalized_power"] > metrics["raw_average_power"]
-        assert metrics["raw_normalized_power"] > 0
+        assert metrics["normalized_power"] > metrics["average_power"]
+        assert metrics["normalized_power"] > 0
 
     def test_normalized_power_steady_effort(self, settings_with_ftp: Settings):
         """Test NP calculation with steady power output."""
@@ -94,11 +97,11 @@ class TestNormalizedPower:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
         # For steady power, NP should be very close to average
-        assert metrics["raw_normalized_power"] == pytest.approx(250, abs=5)
-        assert metrics["raw_average_power"] == pytest.approx(250, rel=0.01)
+        assert metrics["normalized_power"] == pytest.approx(250, abs=5)
+        assert metrics["average_power"] == pytest.approx(250, rel=0.01)
 
     def test_normalized_power_with_zeros(
         self, stream_with_zeros: pd.DataFrame, settings_with_ftp: Settings
@@ -106,13 +109,13 @@ class TestNormalizedPower:
         """Test NP calculation handles zero power correctly."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(stream_with_zeros, moving_only=False)
+        metrics = calculator.calculate(stream_with_zeros)
 
         # Average power includes zeros (time-weighted)
-        assert metrics["raw_average_power"] > 0
+        assert metrics["average_power"] > 0
         # NP may be 0 if not enough valid power points for calculation
         # Just check that metrics are calculated
-        assert "raw_normalized_power" in metrics
+        assert "normalized_power" in metrics
 
 
 class TestIntensityFactor:
@@ -124,12 +127,12 @@ class TestIntensityFactor:
         """Test IF calculation."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert "raw_intensity_factor" in metrics
+        assert "intensity_factor" in metrics
         # IF should be NP / FTP
-        expected_if = metrics["raw_normalized_power"] / settings_with_ftp.ftp
-        assert metrics["raw_intensity_factor"] == pytest.approx(expected_if, rel=1e-3)
+        expected_if = metrics["normalized_power"] / settings_with_ftp.ftp
+        assert metrics["intensity_factor"] == pytest.approx(expected_if, rel=1e-3)
 
     def test_intensity_factor_at_ftp(self, settings_with_ftp: Settings):
         """Test IF calculation when riding at FTP."""
@@ -143,19 +146,19 @@ class TestIntensityFactor:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
         # IF should be approximately 1.0 at FTP
-        assert metrics["raw_intensity_factor"] == pytest.approx(1.0, abs=0.05)
+        assert metrics["intensity_factor"] == pytest.approx(1.0, abs=0.05)
 
     def test_intensity_factor_zero_when_no_ftp(self, simple_stream: pd.DataFrame):
         """Test IF returns 0 when FTP is not set."""
         settings = Settings(ftp=0)
         calculator = PowerCalculator(settings)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert metrics["raw_intensity_factor"] == 0.0
+        assert metrics["intensity_factor"] == 0.0
 
 
 class TestTrainingStressScore:
@@ -167,10 +170,10 @@ class TestTrainingStressScore:
         """Test basic TSS calculation."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(simple_stream, moving_only=False)
+        metrics = calculator.calculate(simple_stream)
 
-        assert "raw_training_stress_score" in metrics
-        assert metrics["raw_training_stress_score"] >= 0
+        assert "training_stress_score" in metrics
+        assert metrics["training_stress_score"] >= 0
 
     def test_tss_one_hour_at_ftp(self, settings_with_ftp: Settings):
         """Test that 1 hour at FTP gives TSS = 100."""
@@ -184,11 +187,11 @@ class TestTrainingStressScore:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
         # TSS should be approximately 100 (may have small variation due to NP
         # calculation)
-        assert metrics["raw_training_stress_score"] == pytest.approx(100, abs=5)
+        assert metrics["training_stress_score"] == pytest.approx(100, abs=5)
 
     def test_tss_scales_with_duration(self, settings_with_ftp: Settings):
         """Test that TSS scales with duration at constant intensity."""
@@ -213,12 +216,12 @@ class TestTrainingStressScore:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics_30 = calculator.calculate(stream_30, moving_only=False)
-        metrics_60 = calculator.calculate(stream_60, moving_only=False)
+        metrics_30 = calculator.calculate(stream_30)
+        metrics_60 = calculator.calculate(stream_60)
 
         # 60 minute TSS should be approximately double 30 minute TSS
-        assert metrics_60["raw_training_stress_score"] == pytest.approx(
-            metrics_30["raw_training_stress_score"] * 2, rel=0.1
+        assert metrics_60["training_stress_score"] == pytest.approx(
+            metrics_30["training_stress_score"] * 2, rel=0.1
         )
 
     def test_tss_zero_when_no_power(self, settings_with_ftp: Settings):
@@ -232,53 +235,16 @@ class TestTrainingStressScore:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        assert metrics["raw_training_stress_score"] == 0.0
+        assert metrics["training_stress_score"] == 0.0
 
 
-class TestMovingMetrics:
-    """Test power calculations with moving_only=True."""
-
-    def test_moving_only_prefix(
-        self, simple_stream: pd.DataFrame, settings_with_ftp: Settings
-    ):
-        """Test that moving_only=True adds 'moving_' prefix."""
-        calculator = PowerCalculator(settings_with_ftp)
-
-        metrics = calculator.calculate(simple_stream, moving_only=True)
-
-        assert "moving_average_power" in metrics
-        assert "moving_normalized_power" in metrics
-        assert "moving_training_stress_score" in metrics
-
-    def test_moving_only_excludes_stopped(self, settings_with_ftp: Settings):
-        """Test that moving_only=True excludes stopped periods."""
-        stream = pd.DataFrame(
-            {
-                "time": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                "watts": [200, 200, 200, 0, 0, 0, 200, 200, 200, 200],
-                "moving": [
-                    True,
-                    True,
-                    True,
-                    False,
-                    False,
-                    False,
-                    True,
-                    True,
-                    True,
-                    True,
-                ],
-            }
-        )
-
-        calculator = PowerCalculator(settings_with_ftp)
-        metrics_all = calculator.calculate(stream, moving_only=False)
-        metrics_moving = calculator.calculate(stream, moving_only=True)
-
-        # Moving average should be higher (excludes zeros when stopped)
-        assert metrics_moving["moving_average_power"] > metrics_all["raw_average_power"]
+# NOTE: TestMovingMetrics class has been removed.
+# The new architecture pre-splits data into raw/moving DataFrames upstream
+# using StreamSplitter. The calculator receives a single DataFrame and
+# returns unprefixed metric names. Testing moving vs raw behavior should
+# be done at the StreamSplitter or analyzer level.
 
 
 class TestTimeWeighting:
@@ -290,10 +256,10 @@ class TestTimeWeighting:
         """Test that time-weighted average correctly handles gaps."""
         calculator = PowerCalculator(settings_with_ftp)
 
-        metrics = calculator.calculate(stream_with_gaps, moving_only=False)
+        metrics = calculator.calculate(stream_with_gaps)
 
         # Average should reflect time-weighting
-        assert metrics["raw_average_power"] > 0
+        assert metrics["average_power"] > 0
 
     def test_time_weighting_favors_longer_efforts(self, settings_with_ftp: Settings):
         """Test that longer efforts are weighted more heavily."""
@@ -307,10 +273,10 @@ class TestTimeWeighting:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
         # Average should be much closer to 300 than 200
-        assert metrics["raw_average_power"] > 280
+        assert metrics["average_power"] > 280
 
 
 class TestEdgeCases:
@@ -321,11 +287,11 @@ class TestEdgeCases:
         calculator = PowerCalculator(settings_with_ftp)
 
         stream = pd.DataFrame({"time": [], "watts": [], "moving": []})
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        # Should return empty metrics with raw_ prefix
-        assert "raw_average_power" in metrics
-        assert metrics["raw_average_power"] == 0.0
+        # Should return empty metrics (no prefix)
+        assert "average_power" in metrics
+        assert metrics["average_power"] == 0.0
 
     def test_missing_watts_column(self, settings_with_ftp: Settings):
         """Test handling when watts column is missing."""
@@ -338,11 +304,11 @@ class TestEdgeCases:
             }
         )
 
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        # Should return empty metrics with raw_ prefix
-        assert "raw_average_power" in metrics
-        assert metrics["raw_average_power"] == 0.0
+        # Should return empty metrics (no prefix)
+        assert "average_power" in metrics
+        assert metrics["average_power"] == 0.0
 
     def test_single_data_point(self, settings_with_ftp: Settings):
         """Test calculation with single data point."""
@@ -356,10 +322,10 @@ class TestEdgeCases:
             }
         )
 
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        assert metrics["raw_average_power"] == 250
-        assert metrics["raw_max_power"] == 250
+        assert metrics["average_power"] == 250
+        assert metrics["max_power"] == 250
 
     def test_nan_values(self, settings_with_ftp: Settings):
         """Test handling of NaN values in power data."""
@@ -373,11 +339,11 @@ class TestEdgeCases:
             }
         )
 
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
         # Should handle NaN gracefully
-        assert metrics["raw_average_power"] > 0
-        assert not np.isnan(metrics["raw_average_power"])
+        assert metrics["average_power"] > 0
+        assert not np.isnan(metrics["average_power"])
 
 
 class TestVariabilityIndex:
@@ -395,9 +361,9 @@ class TestVariabilityIndex:
         )
 
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(stream, moving_only=False)
+        metrics = calculator.calculate(stream)
 
-        vi = metrics["raw_normalized_power"] / metrics["raw_average_power"]
+        vi = metrics["normalized_power"] / metrics["average_power"]
         assert vi == pytest.approx(1.0, abs=0.05)
 
     def test_variability_index_intervals(
@@ -405,8 +371,8 @@ class TestVariabilityIndex:
     ):
         """Test VI is > 1.0 for interval workout."""
         calculator = PowerCalculator(settings_with_ftp)
-        metrics = calculator.calculate(realistic_stream, moving_only=False)
+        metrics = calculator.calculate(realistic_stream)
 
-        vi = metrics["raw_normalized_power"] / metrics["raw_average_power"]
+        vi = metrics["normalized_power"] / metrics["average_power"]
         # Interval workout should have VI > 1.0
         assert vi > 1.0

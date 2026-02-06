@@ -3,6 +3,9 @@ High-level service for activity processing.
 
 This service coordinates data loading, processing, analysis, and storage
 for activity data.
+
+NOTE: Analysis now returns separate metrics for raw and moving data via
+AnalysisResult. The service handles both sets of metrics appropriately.
 """
 
 import logging
@@ -10,7 +13,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from ..analysis import ActivityAnalyzer
+from ..analysis import ActivityAnalyzer, AnalysisResult
 from ..data import ActivityDataLoader, ActivityRepository, StreamDataProcessor
 from ..exceptions import DataLoadError, ProcessingError, StreamDataError
 from ..settings import Settings
@@ -23,7 +26,7 @@ class ActivityServiceProtocol(Protocol):
 
     def process_activity(
         self, activity_row: pd.Series
-    ) -> tuple[dict[str, float], pd.DataFrame]:
+    ) -> tuple[AnalysisResult, pd.DataFrame]:
         """Process a single activity."""
         ...
 
@@ -54,21 +57,21 @@ class ActivityService:
 
     def process_activity(
         self, activity_row: pd.Series
-    ) -> tuple[dict[str, float | str], pd.DataFrame]:
+    ) -> tuple[AnalysisResult, pd.DataFrame]:
         """
         Process a single activity through the complete pipeline.
 
         This method:
         1. Loads stream data
         2. Processes and cleans it
-        3. Analyzes and computes metrics
-        4. Returns both metrics and processed stream
+        3. Analyzes and computes metrics (separate for raw/moving)
+        4. Returns AnalysisResult and processed stream
 
         Args:
             activity_row: Series containing activity metadata
 
         Returns:
-            Tuple of (metrics dict, processed stream DataFrame)
+            Tuple of (AnalysisResult, processed stream DataFrame)
 
         Raises:
             DataLoadError: If data loading fails
@@ -89,11 +92,11 @@ class ActivityService:
             self.logger.debug(f"Processing stream for activity {activity_id}")
             processed_stream = self.processor.process(raw_stream)
 
-            # Analyze activity
+            # Analyze activity (returns AnalysisResult with raw and moving metrics)
             self.logger.debug(f"Analyzing activity {activity_id}")
-            metrics = self.analyzer.analyze(activity_row, processed_stream)
+            analysis_result = self.analyzer.analyze(activity_row, processed_stream)
 
-            return metrics, processed_stream
+            return analysis_result, processed_stream
 
         except DataLoadError:
             raise

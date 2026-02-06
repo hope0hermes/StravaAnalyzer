@@ -6,9 +6,10 @@ to accomplish business goals.
 """
 
 from .activity_service import ActivityService
-from .analysis_service import AnalysisService
+from .analysis_service import AnalysisService, DualAnalysisResult
 
 __all__ = [
     "ActivityService",
     "AnalysisService",
+    "DualAnalysisResult",
 ]

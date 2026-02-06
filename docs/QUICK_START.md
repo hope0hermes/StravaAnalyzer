@@ -38,11 +38,11 @@ uv sync --group viz
 The easiest way to analyze your activities:
 
 ```python
-from strava_analyzer.modern_pipeline import ModernPipeline
+from strava_analyzer.pipeline import Pipeline
 from strava_analyzer.settings import Settings
 
 settings = Settings()
-pipeline = ModernPipeline(settings)
+pipeline = Pipeline(settings)
 pipeline.run()
 
 print("✅ Analysis complete! Check your processed_data directory.")

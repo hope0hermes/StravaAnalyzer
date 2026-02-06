@@ -48,6 +48,7 @@ class TrainingLoadWindows:
     ATL_DAYS: Final[int] = 7  # Acute Training Load (Fatigue)
     CTL_DAYS: Final[int] = 42  # Chronic Training Load (Fitness)
     FTP_ROLLING_WINDOW_DAYS: Final[int] = 42  # Days to look back for FTP
+    CP_WINDOW_DAYS: Final[int] = 90  # Rolling window for CP/W' estimation
 
     # Alternative CTL windows
     CTL_DAYS_CONSERVATIVE: Final[int] = 28  # More conservative CTL window

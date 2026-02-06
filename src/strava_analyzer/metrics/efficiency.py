@@ -5,6 +5,9 @@ This module handles efficiency metrics including:
 - Efficiency Factor (EF)
 - Power:HR decoupling
 - Variability Index (VI)
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -21,50 +24,46 @@ logger = logging.getLogger(__name__)
 class EfficiencyCalculator(BaseMetricCalculator):
     """Calculates efficiency and decoupling metrics."""
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate all efficiency metrics.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of efficiency metrics with appropriate prefix
+            Dictionary of efficiency metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
-
-        has_power = "watts" in df.columns
-        has_hr = "heartrate" in df.columns
+        has_power = "watts" in stream_df.columns
+        has_hr = "heartrate" in stream_df.columns
 
         if not has_power or not has_hr:
-            return self._get_empty_metrics(prefix)
+            return self._get_empty_metrics()
 
         try:
-            metrics = {}
+            metrics: dict[str, float] = {}
 
             # Efficiency Factor
-            ef = self._calculate_efficiency_factor(df)
-            metrics[f"{prefix}efficiency_factor"] = ef
+            ef = self._calculate_efficiency_factor(stream_df)
+            metrics["efficiency_factor"] = ef
 
             # Decoupling
-            decoupling, first_half_ef, second_half_ef = self._calculate_decoupling(df)
-            metrics[f"{prefix}power_hr_decoupling"] = decoupling
-            metrics[f"{prefix}first_half_ef"] = first_half_ef
-            metrics[f"{prefix}second_half_ef"] = second_half_ef
+            decoupling, first_half_ef, second_half_ef = self._calculate_decoupling(
+                stream_df
+            )
+            metrics["power_hr_decoupling"] = decoupling
+            metrics["first_half_ef"] = first_half_ef
+            metrics["second_half_ef"] = second_half_ef
 
             # Variability Index
-            vi = self._calculate_variability_index(df)
-            metrics[f"{prefix}variability_index"] = vi
+            vi = self._calculate_variability_index(stream_df)
+            metrics["variability_index"] = vi
 
             return metrics
 
         except Exception as e:
             logger.warning(f"Error calculating efficiency metrics: {e}")
-            return self._get_empty_metrics(prefix)
+            return self._get_empty_metrics()
 
     def _calculate_normalized_power(self, stream_df: pd.DataFrame) -> float:
         """Calculate normalized power for efficiency calculations."""
@@ -102,10 +101,8 @@ class EfficiencyCalculator(BaseMetricCalculator):
 
         try:
             np_value = self._calculate_normalized_power(stream_df)
-            # Include zeros for stopped periods
             hr_data = stream_df["heartrate"]
-            # Note: EF uses full stream, not filtered, so don't clip gaps
-            avg_hr = self._time_weighted_mean(hr_data, stream_df, clip_gaps=False)
+            avg_hr = self._time_weighted_mean(hr_data, stream_df)
 
             if np_value > 0 and avg_hr > 0:
                 ef = np_value / avg_hr
@@ -152,9 +149,7 @@ class EfficiencyCalculator(BaseMetricCalculator):
 
         try:
             np_value = self._calculate_normalized_power(stream_df)
-            # Include zeros for stopped periods
-            # Note: VI uses full stream, not filtered, so don't clip gaps
-            ap = self._time_weighted_mean(power_data, stream_df, clip_gaps=False)
+            ap = self._time_weighted_mean(power_data, stream_df)
 
             if np_value > 0 and ap > 0:
                 vi = np_value / ap
@@ -163,12 +158,12 @@ class EfficiencyCalculator(BaseMetricCalculator):
         except Exception:
             return 0.0
 
-    def _get_empty_metrics(self, prefix: str) -> dict[str, float]:
+    def _get_empty_metrics(self) -> dict[str, float]:
         """Return dict of zero-valued metrics when no valid data."""
         return {
-            f"{prefix}efficiency_factor": 0.0,
-            f"{prefix}power_hr_decoupling": 0.0,
-            f"{prefix}first_half_ef": 0.0,
-            f"{prefix}second_half_ef": 0.0,
-            f"{prefix}variability_index": 0.0,
+            "efficiency_factor": 0.0,
+            "power_hr_decoupling": 0.0,
+            "first_half_ef": 0.0,
+            "second_half_ef": 0.0,
+            "variability_index": 0.0,
         }

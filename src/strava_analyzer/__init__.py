@@ -14,19 +14,13 @@ from .metrics import (
     ZoneCalculator,
 )
 from .models import (
-    ActivityMetrics,
     ActivityStream,
-    ActivitySummary,
     ActivityType,
     CriticalPowerModel,
     GradeAdjustmentConfig,
-    HeartRateZoneConfig,
-    HeartRateZones,
     LongitudinalSummary,
     MaximumMeanPowers,
     PowerProfile,
-    PowerZones,
-    RunningMetrics,
     TrainingLoadSummary,
 )
 from .pipeline import Pipeline
@@ -52,19 +46,13 @@ __all__ = [
     "get_version",
     "get_package_info",
     # Models
-    "ActivityMetrics",
     "ActivityStream",
-    "ActivitySummary",
     "ActivityType",
     "CriticalPowerModel",
     "GradeAdjustmentConfig",
-    "HeartRateZoneConfig",
-    "HeartRateZones",
     "LongitudinalSummary",
     "MaximumMeanPowers",
     "PowerProfile",
-    "PowerZones",
-    "RunningMetrics",
     "TrainingLoadSummary",
     # Calculators
     "EfficiencyCalculator",

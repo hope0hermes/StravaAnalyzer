@@ -443,12 +443,12 @@ service.save_results(enriched_df, summary)
 print(f"Processed {len(enriched_df)} activities")
 ```
 
-### Pattern 3: Use Modern Pipeline
+### Pattern 3: Use Pipeline
 
 ```python
-from strava_analyzer.modern_pipeline import ModernPipeline
+from strava_analyzer.pipeline import Pipeline
 
-pipeline = ModernPipeline(settings)
+pipeline = Pipeline(settings)
 pipeline.run()
 # Done! Handles everything
 ```
@@ -644,8 +644,8 @@ pipeline.process()
 
 **After (Recommended)**:
 ```python
-from strava_analyzer.modern_pipeline import ModernPipeline
-pipeline = ModernPipeline(settings)
+from strava_analyzer.pipeline import Pipeline
+pipeline = Pipeline(settings)
 pipeline.run()
 ```
 

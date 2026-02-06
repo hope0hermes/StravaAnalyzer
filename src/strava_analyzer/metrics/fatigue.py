@@ -5,6 +5,9 @@ This module provides metrics for analyzing fatigue during activities:
 - Fatigue index from power decay
 - First/second half power comparison
 - Power sustainability metrics
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -26,21 +29,17 @@ class FatigueCalculator(BaseMetricCalculator):
     to quantify fatigue resistance.
     """
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate fatigue resistance metrics.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of fatigue metrics with appropriate prefix
+            Dictionary of fatigue metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
+        df = stream_df
         metrics: dict[str, float] = {}
 
         # Only calculate for activities with power data
@@ -56,21 +55,18 @@ class FatigueCalculator(BaseMetricCalculator):
         half_comparison = self._calculate_half_comparison(df)
         sustainability = self._calculate_power_sustainability(df)
 
-        # Add all metrics with prefix
-        for key, value in {
-            **fatigue_metrics,
-            **half_comparison,
-            **sustainability,
-        }.items():
-            metrics[f"{prefix}{key}"] = value
+        # Combine all metrics
+        metrics.update(fatigue_metrics)
+        metrics.update(half_comparison)
+        metrics.update(sustainability)
 
         return metrics
 
     def _calculate_fatigue_index(self, df: pd.DataFrame) -> dict[str, float]:
-        """
-        Calculate fatigue index from power decay.
+        """Calculate fatigue index from power decay between halves.
 
-        Fatigue Index = (Initial Power - Final Power) / Initial Power × 100
+        Fatigue Index = (FHalf Power - SHalf Power) / FHalf Power × 100
+        Uses time-weighted averaging for accurate power calculations.
 
         Args:
             df: Stream data with power
@@ -78,38 +74,39 @@ class FatigueCalculator(BaseMetricCalculator):
         Returns:
             Dictionary with fatigue index metrics
         """
-        power = df["watts"].values
-
-        # Filter out zeros and very low power values
-        valid_power = power[power > ValidationThresholds.MIN_POWER_WATTS]
-
-        if len(valid_power) < 60:  # Need at least 1 minute of data
+        if len(df) < 120:  # Need at least 2 minutes
             return {}
 
-        # Use first and last 5 minutes for comparison
-        first_5min = min(300, len(valid_power) // 4)
-        last_5min = min(300, len(valid_power) // 4)
+        # Split into halves (consistent with power_drift calculation)
+        midpoint = len(df) // 2
+        first_half_df = df.iloc[:midpoint]
+        second_half_df = df.iloc[midpoint:]
 
-        if first_5min < 60 or last_5min < 60:
+        # Calculate time-weighted averages for each half
+        first_half_power = self._time_weighted_mean(
+            first_half_df["watts"], first_half_df
+        )
+        second_half_power = self._time_weighted_mean(
+            second_half_df["watts"], second_half_df
+        )
+
+        if first_half_power == 0 or second_half_power == 0:
             return {}
 
-        initial_power = valid_power[:first_5min].mean()
-        final_power = valid_power[-last_5min:].mean()
-
-        if initial_power == 0:
-            return {}
-
-        fatigue_index = ((initial_power - final_power) / initial_power) * 100
+        # Fatigue index: positive value representing power loss
+        fatigue_index = (
+            (first_half_power - second_half_power) / first_half_power
+        ) * 100
 
         return {
             "fatigue_index": fatigue_index,
-            "initial_5min_power": initial_power,
-            "final_5min_power": final_power,
+            "initial_5min_power": first_half_power,  # backwards compat
+            "final_5min_power": second_half_power,  # backwards compat
         }
 
     def _calculate_half_comparison(self, df: pd.DataFrame) -> dict[str, float]:
         """
-        Compare first half vs second half power.
+        Compare first half vs second half power using time-weighted averaging.
 
         Args:
             df: Stream data with power
@@ -117,44 +114,37 @@ class FatigueCalculator(BaseMetricCalculator):
         Returns:
             Dictionary with half comparison metrics
         """
-        power = df["watts"].values
-
-        if len(power) < 120:  # Need at least 2 minutes
+        if len(df) < 120:  # Need at least 2 minutes
             return {}
 
-        # Split into halves
-        midpoint = len(power) // 2
-        first_half = power[:midpoint]
-        second_half = power[midpoint:]
+        # Split into halves (consistent with cardiac drift calculation)
+        midpoint = len(df) // 2
+        first_half_df = df.iloc[:midpoint]
+        second_half_df = df.iloc[midpoint:]
 
-        # Calculate averages for non-zero values
-        first_half_valid = first_half[first_half > ValidationThresholds.MIN_POWER_WATTS]
-        second_half_valid = second_half[
-            second_half > ValidationThresholds.MIN_POWER_WATTS
-        ]
-
-        if len(first_half_valid) == 0 or len(second_half_valid) == 0:
-            return {}
-
-        first_half_power = first_half_valid.mean()
-        second_half_power = second_half_valid.mean()
-
-        # Calculate power drop percentage
-        power_drop_pct = (
-            ((first_half_power - second_half_power) / first_half_power) * 100
-            if first_half_power > 0
-            else 0.0
+        # Calculate time-weighted averages for each half
+        first_half_power = self._time_weighted_mean(
+            first_half_df["watts"], first_half_df
         )
+        second_half_power = self._time_weighted_mean(
+            second_half_df["watts"], second_half_df
+        )
+
+        if first_half_power == 0 or second_half_power == 0:
+            return {}
+
+        # Calculate power drift percentage (negative = power decreasing)
+        power_drift_pct = (
+            (second_half_power - first_half_power) / first_half_power
+        ) * 100
 
         # Calculate ratio
-        half_power_ratio = (
-            second_half_power / first_half_power if first_half_power > 0 else 0.0
-        )
+        half_power_ratio = second_half_power / first_half_power
 
         return {
             "first_half_power": first_half_power,
             "second_half_power": second_half_power,
-            "power_drop_percentage": power_drop_pct,
+            "power_drift": power_drift_pct,
             "half_power_ratio": half_power_ratio,
         }
 

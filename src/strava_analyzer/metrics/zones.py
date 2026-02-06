@@ -2,11 +2,14 @@
 Zone distribution calculations.
 
 This module handles time-in-zone calculations for:
-- Power zones (7-zone Coggan model)
-- Heart rate zones (5-zone model)
+- Power zones (7-zone model from settings, LT-based or Coggan percentage-based)
+- Heart rate zones (5-zone model from settings, LT-based or percentage-based)
 - Cadence zones
 
 Also provides utility functions for binning features and calculating power profiles.
+
+NOTE: Data is pre-split into raw/moving DataFrames upstream. Calculators receive
+a single DataFrame and return unprefixed metric names.
 """
 
 import logging
@@ -15,7 +18,6 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
-from ..constants import HeartRateZoneThresholds, PowerZoneThresholds
 from ..exceptions import MetricCalculationError, ValidationError
 from ..models import MaximumMeanPowers, PowerProfile
 from ..settings import Settings
@@ -27,108 +29,99 @@ logger = logging.getLogger(__name__)
 class ZoneCalculator(BaseMetricCalculator):
     """Calculates zone distributions from activity stream data."""
 
-    def calculate(
-        self, stream_df: pd.DataFrame, moving_only: bool = False
-    ) -> dict[str, float]:
+    def calculate(self, stream_df: pd.DataFrame) -> dict[str, float]:
         """
-        Calculate zone distributions.
+        Calculate zone distributions using time-weighted calculations.
 
         Args:
-            stream_df: DataFrame containing activity stream data
-            moving_only: If True, only use data where moving=True
+            stream_df: DataFrame containing activity stream data (pre-split)
 
         Returns:
-            Dictionary of zone metrics with appropriate prefix
+            Dictionary of zone metrics (no prefix)
         """
-        df = self._filter_moving(stream_df, moving_only)
-        prefix = self._get_prefix(moving_only)
-        metrics = {}
+        metrics: dict[str, float] = {}
 
         # Calculate power zones if available
-        if "watts" in df.columns and self.settings.ftp > 0:
-            power_zones = self._calculate_power_zones(df["watts"])
+        if "watts" in stream_df.columns and self.settings.ftp > 0:
+            power_zones = self._calculate_power_zones(stream_df["watts"], stream_df)
             for zone_name, percentage in power_zones.items():
-                metrics[f"{prefix}{zone_name}_percentage"] = percentage
+                metrics[f"{zone_name}_percentage"] = percentage
 
         # Calculate HR zones if available
-        if "heartrate" in df.columns and self.settings.fthr > 0:
-            hr_zones = self._calculate_hr_zones(df["heartrate"])
+        if "heartrate" in stream_df.columns and self.settings.fthr > 0:
+            hr_zones = self._calculate_hr_zones(stream_df["heartrate"], stream_df)
             for zone_name, percentage in hr_zones.items():
-                metrics[f"{prefix}{zone_name}_percentage"] = percentage
+                metrics[f"{zone_name}_percentage"] = percentage
 
         return metrics
 
-    def _calculate_power_zones(self, power_series: pd.Series) -> dict[str, float]:
-        """Calculate power zone distribution (Coggan 7-zone model)."""
-        ftp = self.settings.ftp
-        total_points = len(power_series)
+    def _calculate_power_zones(
+        self, power_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
+        """Calculate power zone distribution using time-weighted calculations.
 
-        if total_points == 0:
+        Uses the power zones defined in settings, which can be:
+        - LT-based 7-zone model (if lt1_power and lt2_power are configured)
+        - Coggan percentage-based 7-zone model (fallback)
+
+        Time-weighted calculation ensures accurate percentages regardless of
+        variable sampling rates or gaps in the data.
+        """
+        if power_series.empty:
             return {}
 
-        zones = {
-            "power_z1": (0, PowerZoneThresholds.ZONE_1_MAX * ftp),
-            "power_z2": (
-                PowerZoneThresholds.ZONE_1_MAX * ftp,
-                PowerZoneThresholds.ZONE_2_MAX * ftp,
-            ),
-            "power_z3": (
-                PowerZoneThresholds.ZONE_2_MAX * ftp,
-                PowerZoneThresholds.ZONE_3_MAX * ftp,
-            ),
-            "power_z4": (
-                PowerZoneThresholds.ZONE_3_MAX * ftp,
-                PowerZoneThresholds.ZONE_4_MAX * ftp,
-            ),
-            "power_z5": (
-                PowerZoneThresholds.ZONE_4_MAX * ftp,
-                PowerZoneThresholds.ZONE_5_MAX * ftp,
-            ),
-            "power_z6": (
-                PowerZoneThresholds.ZONE_5_MAX * ftp,
-                PowerZoneThresholds.ZONE_6_MAX * ftp,
-            ),
-            "power_z7": (PowerZoneThresholds.ZONE_6_MAX * ftp, float("inf")),
-        }
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
+            return {}
+
+        # Use zones from settings (LT-based or percentage-based)
+        zones = self.settings.power_zones
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
+            output_name = zone_name.replace("power_zone_", "power_z")
             mask = (power_series >= lower) & (power_series < upper)
-            time_in_zone = mask.sum()
-            zone_percentages[zone_name] = (time_in_zone / total_points) * 100
+            # Time-weighted: sum of time deltas where condition is true
+            time_in_zone = time_deltas[mask].sum()
+            zone_percentages[output_name] = (time_in_zone / total_time) * 100
 
         return zone_percentages
 
-    def _calculate_hr_zones(self, hr_series: pd.Series) -> dict[str, float]:
-        """Calculate HR zone distribution (5-zone model)."""
-        fthr = self.settings.fthr
-        total_points = len(hr_series)
+    def _calculate_hr_zones(
+        self, hr_series: pd.Series, stream_df: pd.DataFrame
+    ) -> dict[str, float]:
+        """Calculate HR zone distribution using time-weighted calculations.
 
-        if total_points == 0:
+        Uses the HR zones defined in settings, which can be:
+        - LT-based 5-zone model (if lt1_hr and lt2_hr are configured)
+        - Percentage-based 5-zone model (fallback)
+
+        Time-weighted calculation ensures accurate percentages regardless of
+        variable sampling rates or gaps in the data.
+        """
+        if hr_series.empty:
             return {}
 
-        zones = {
-            "hr_z1": (0, HeartRateZoneThresholds.ZONE_1_MAX * fthr),
-            "hr_z2": (
-                HeartRateZoneThresholds.ZONE_1_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_2_MAX * fthr,
-            ),
-            "hr_z3": (
-                HeartRateZoneThresholds.ZONE_2_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_3_MAX * fthr,
-            ),
-            "hr_z4": (
-                HeartRateZoneThresholds.ZONE_3_MAX * fthr,
-                HeartRateZoneThresholds.ZONE_4_MAX * fthr,
-            ),
-            "hr_z5": (HeartRateZoneThresholds.ZONE_4_MAX * fthr, float("inf")),
-        }
+        # Get time deltas for time-weighted calculation
+        time_deltas = self._calculate_time_deltas(stream_df)
+        total_time = time_deltas.sum()
+
+        if total_time == 0:
+            return {}
+
+        # Use zones from settings (LT-based or percentage-based)
+        zones = self.settings.hr_zone_ranges
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
+            output_name = zone_name.replace("hr_zone_", "hr_z")
             mask = (hr_series >= lower) & (hr_series < upper)
-            time_in_zone = mask.sum()
-            zone_percentages[zone_name] = (time_in_zone / total_points) * 100
+            # Time-weighted: sum of time deltas where condition is true
+            time_in_zone = time_deltas[mask].sum()
+            zone_percentages[output_name] = (time_in_zone / total_time) * 100
 
         return zone_percentages
 
