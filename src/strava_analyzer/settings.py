@@ -39,6 +39,10 @@ class Settings(BaseSettings):
 
     def __init__(self, **data):
         """Initialize the Settings object."""
+        # Track if zones were explicitly provided by user
+        user_provided_power_zones = "power_zones" in data
+        user_provided_hr_zones = "hr_zone_ranges" in data
+
         super().__init__(**data)
         # Set processed file paths based on processed_data_dir
         if self.processed_data_dir:
@@ -49,11 +53,13 @@ class Settings(BaseSettings):
             if self.daily_summary_file is None:
                 self.daily_summary_file = self.processed_data_dir / "daily_summary.csv"
 
-        # Recalculate power zones based on current FTP
-        self._compute_power_zones()
+        # Recalculate power zones only if not explicitly provided
+        if not user_provided_power_zones:
+            self._compute_power_zones()
 
-        # Recalculate HR zones based on current FTHR
-        self._compute_hr_zones()
+        # Recalculate HR zones only if not explicitly provided
+        if not user_provided_hr_zones:
+            self._compute_hr_zones()
 
     def _compute_power_zones(self) -> None:
         """Compute power zones from physiological thresholds or FTP.
@@ -96,13 +102,13 @@ class Settings(BaseSettings):
         else:
             # Fallback to Coggan's percentage-based 7-zone model
             self.power_zones = {
-                "power_zone_1": (0, int(0.55 * self.ftp)),
-                "power_zone_2": (int(0.55 * self.ftp), int(0.75 * self.ftp)),
-                "power_zone_3": (int(0.75 * self.ftp), int(0.90 * self.ftp)),
-                "power_zone_4": (int(0.90 * self.ftp), int(1.05 * self.ftp)),
-                "power_zone_5": (int(1.05 * self.ftp), int(1.20 * self.ftp)),
-                "power_zone_6": (int(1.20 * self.ftp), int(1.50 * self.ftp)),
-                "power_zone_7": (int(1.50 * self.ftp), float("inf")),
+                "power_zone_1": (0, round(0.55 * self.ftp)),
+                "power_zone_2": (round(0.55 * self.ftp) + 1, round(0.75 * self.ftp)),
+                "power_zone_3": (round(0.75 * self.ftp) + 1, round(0.90 * self.ftp)),
+                "power_zone_4": (round(0.90 * self.ftp) + 1, round(1.05 * self.ftp)),
+                "power_zone_5": (round(1.05 * self.ftp) + 1, round(1.20 * self.ftp)),
+                "power_zone_6": (round(1.20 * self.ftp) + 1, round(1.50 * self.ftp)),
+                "power_zone_7": (round(1.50 * self.ftp) + 1, float("inf")),
             }
 
     def _compute_hr_zones(self) -> None:

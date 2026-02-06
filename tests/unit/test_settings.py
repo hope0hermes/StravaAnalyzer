@@ -178,7 +178,8 @@ class TestSettingsZoneConfiguration:
 
         assert "hr_zone_1" in settings.hr_zone_ranges
         assert "hr_zone_5" in settings.hr_zone_ranges
-        assert settings.hr_zone_ranges["hr_zone_1"] == (39, 110)
+        # HR Z1 = 0 to int(0.85 * fthr) with fthr=170
+        assert settings.hr_zone_ranges["hr_zone_1"] == (0, int(0.85 * 170))
 
     def test_custom_zones_override_defaults(self, temp_config_file: Path):
         """Test that custom zones override default zones."""
