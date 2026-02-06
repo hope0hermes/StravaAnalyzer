@@ -42,8 +42,8 @@ class ZoneEdgesManager:
             List of right edges sorted in ascending order
         """
         right_edges = []
-        for zone_name, (left, right) in zones.items():
-            # Skip infinity (last zone upper bound)
+        for _, (_, right) in zones.items():
+            # Skip infinity (last zone)
             if right != float("inf"):
                 right_edges.append(right)
 
@@ -56,13 +56,13 @@ class ZoneEdgesManager:
         Returns:
             Dictionary with 'power_zone_cols' and 'hr_zone_cols' lists
         """
-        # Use the methods from settings which compute zones dynamically based on FTP/FTHR
+        # Static zones computed dynamically from FTP/FTHR thresholds
         power_edges = self.settings.get_power_zone_edges()
         hr_edges = self.settings.get_hr_zone_edges()
 
         # Enumerate starting from 1
-        power_cols = [f"power_zone_{i+1}" for i in range(len(power_edges))]
-        hr_cols = [f"hr_zone_{i+1}" for i in range(len(hr_edges))]
+        power_cols = [f"power_zone_{i + 1}" for i in range(len(power_edges))]
+        hr_cols = [f"hr_zone_{i + 1}" for i in range(len(hr_edges))]
 
         return {"power_zone_cols": power_cols, "hr_zone_cols": hr_cols}
 
@@ -116,7 +116,9 @@ class ZoneEdgesManager:
 
         # Convert to datetime if needed
         if not pd.api.types.is_datetime64_any_dtype(df["start_date_local"]):
-            df["start_date_local"] = pd.to_datetime(df["start_date_local"], format='ISO8601', utc=True)
+            df["start_date_local"] = pd.to_datetime(
+                df["start_date_local"], format="ISO8601", utc=True
+            )
 
         # Sort by start_date_local in descending order (most recent first)
         df = df.sort_values("start_date_local", ascending=False).reset_index(drop=True)
@@ -181,10 +183,9 @@ class ZoneEdgesManager:
                     df.at[i, col] = float(hr_edges[col_idx])
 
         self.logger.info(
-            f"Applied {len(power_edges)} power zone edges and {len(hr_edges)} HR zone edges "
-            f"to {len(df)} activities. "
-            f"Closest activity at index {closest_idx}. "
-            f"Backpropagated to {len(df) - closest_idx - 1} older activities."
+            f"Applied {len(power_edges)} power + {len(hr_edges)} HR zone edges "
+            f"to {len(df)} activities at index {closest_idx}, "
+            f"backpropagated to {len(df) - closest_idx - 1} older activities"
         )
 
         # Drop temporary date_diff column

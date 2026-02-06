@@ -123,8 +123,7 @@ class TIDCalculator(BaseMetricCalculator):
     def _calculate_hr_tid(
         self, hr_series: pd.Series, stream_df: pd.DataFrame
     ) -> dict[str, float]:
-        """
-        Calculate TID metrics based on heart rate zones using time-weighted calculations.
+        """Calculate HR-based TID metrics using time-weighted calculations.
 
         Uses 3-zone model:
         - Zone 1 (Low): < 82% FTHR (Z1)
@@ -210,9 +209,7 @@ class TIDCalculator(BaseMetricCalculator):
         # Threshold: High Z2/Z3
         return "threshold"
 
-    def calculate_weekly_tid(
-        self, activities_df: pd.DataFrame
-    ) -> dict[str, float]:
+    def calculate_weekly_tid(self, activities_df: pd.DataFrame) -> dict[str, float]:
         """
         Calculate weekly TID from multiple activities.
 

@@ -12,7 +12,6 @@ import logging
 
 import pandas as pd
 
-from ..constants import ValidationThresholds
 from .base import BaseMetricCalculator
 
 logger = logging.getLogger(__name__)
@@ -104,9 +103,7 @@ class ClimbingCalculator(BaseMetricCalculator):
 
         return float(vam), float(climbing_time)
 
-    def _calculate_climbing_power(
-        self, stream_df: pd.DataFrame
-    ) -> tuple[float, float]:
+    def _calculate_climbing_power(self, stream_df: pd.DataFrame) -> tuple[float, float]:
         """
         Calculate average power on significant climbs (gradient > threshold).
 

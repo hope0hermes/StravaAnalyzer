@@ -56,9 +56,7 @@ class PowerCalculator(BaseMetricCalculator):
             metrics["max_power"] = (
                 float(valid_power.max()) if not valid_power.empty else 0.0
             )
-            metrics["power_per_kg"] = float(
-                avg_power / self.settings.rider_weight_kg
-            )
+            metrics["power_per_kg"] = float(avg_power / self.settings.rider_weight_kg)
 
             # Normalized Power (uses time-weighted rolling average)
             normalized_power = self._calculate_normalized_power(stream_df)
@@ -137,4 +135,3 @@ class PowerCalculator(BaseMetricCalculator):
             "intensity_factor": 0.0,
             "training_stress_score": 0.0,
         }
-

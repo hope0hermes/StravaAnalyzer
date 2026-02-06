@@ -47,9 +47,7 @@ class HeartRateCalculator(BaseMetricCalculator):
 
             # Max HR should still exclude zeros
             valid_hr = hr_data[hr_data > 0]
-            metrics["max_hr"] = (
-                float(valid_hr.max()) if not valid_hr.empty else 0.0
-            )
+            metrics["max_hr"] = float(valid_hr.max()) if not valid_hr.empty else 0.0
 
             # Calculate HR-based TSS if FTHR is configured
             if self.settings.fthr and self.settings.fthr > 0:
@@ -108,4 +106,3 @@ class HeartRateCalculator(BaseMetricCalculator):
             "max_hr": 0.0,
             "hr_training_stress": 0.0,
         }
-

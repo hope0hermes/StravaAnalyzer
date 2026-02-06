@@ -13,7 +13,6 @@ from typing import Protocol
 
 import pandas as pd
 
-from ..constants import TimeConstants
 from ..settings import Settings
 
 
@@ -98,9 +97,7 @@ class BaseMetricCalculator(ABC):
 
         return time_diffs
 
-    def _time_weighted_mean(
-        self, values: pd.Series, stream_df: pd.DataFrame
-    ) -> float:
+    def _time_weighted_mean(self, values: pd.Series, stream_df: pd.DataFrame) -> float:
         """
         Calculate time-weighted mean of a series.
 
@@ -138,4 +135,3 @@ class BaseMetricCalculator(ABC):
 
         # Total duration is the time deltas sum
         return float(self._calculate_time_deltas(stream_df).sum())
-

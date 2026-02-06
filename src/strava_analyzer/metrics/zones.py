@@ -82,7 +82,6 @@ class ZoneCalculator(BaseMetricCalculator):
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
-            # Convert zone name from settings format (power_zone_1) to output format (power_z1)
             output_name = zone_name.replace("power_zone_", "power_z")
             mask = (power_series >= lower) & (power_series < upper)
             # Time-weighted: sum of time deltas where condition is true
@@ -118,7 +117,6 @@ class ZoneCalculator(BaseMetricCalculator):
 
         zone_percentages = {}
         for zone_name, (lower, upper) in zones.items():
-            # Convert zone name from settings format (hr_zone_1) to output format (hr_z1)
             output_name = zone_name.replace("hr_zone_", "hr_z")
             mask = (hr_series >= lower) & (hr_series < upper)
             # Time-weighted: sum of time deltas where condition is true

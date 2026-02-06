@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from .exceptions import ProcessingError
-from .services import AnalysisService, DualAnalysisResult
+from .services import AnalysisService
 from .settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)

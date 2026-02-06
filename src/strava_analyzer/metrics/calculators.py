@@ -136,8 +136,7 @@ class MetricsCalculator:
             all_metrics.update(tid_classification)
 
             # Convert zone percentages to actual times (in seconds)
-            # This needs to happen after we have moving_time from _calculate_basic_metrics
-            # So we'll add it after all metrics are collected
+            # Must occur after basic metrics (moving_time) are calculated
 
             # Fatigue resistance (only for activities > 1 hour)
             fatigue_metrics = self.fatigue_calculator.calculate(stream_df)
@@ -299,17 +298,17 @@ class MetricsCalculator:
 
         return metrics
 
-    def _calculate_zone_times(self, all_metrics: dict[str, float | str]) -> dict[str, float]:
+    def _calculate_zone_times(
+        self, all_metrics: dict[str, float | str]
+    ) -> dict[str, float]:
         """
         Convert zone percentages to actual times in seconds.
 
-        This creates separate time metrics (in seconds) from the zone percentage metrics.
-        For example, power_z1_percentage: 25.0 with moving_time: 3600
-        becomes power_z1_time: 900.0 (seconds)
+        Convert zone percentages to zone time metrics (in seconds).
+        E.g., power_z1_percentage: 25.0 + moving_time: 3600 → power_z1_time: 900.0 s
 
         Args:
-            all_metrics: Dictionary containing all calculated metrics including zone percentages
-                        and moving_time
+            all_metrics: Dict with all metrics (zone percentages, moving_time, etc)
 
         Returns:
             Dictionary of zone time metrics in seconds
@@ -317,7 +316,7 @@ class MetricsCalculator:
         zone_times: dict[str, float] = {}
 
         # Get the base time to use for calculations (moving_time in seconds)
-        base_time = all_metrics.get("moving_time", 0.0)
+        base_time = float(all_metrics.get("moving_time", 0.0))
 
         if base_time <= 0:
             return zone_times

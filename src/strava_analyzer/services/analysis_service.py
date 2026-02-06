@@ -17,7 +17,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from ..analysis import ActivitySummarizer, AnalysisResult, ThresholdEstimator
+from ..analysis import ActivitySummarizer, ThresholdEstimator
 from ..constants import CSVConstants, TrainingLoadWindows
 from ..data import ActivityDataLoader
 from ..exceptions import DataLoadError, ProcessingError
@@ -224,7 +224,9 @@ class AnalysisService:
                     continue
 
                 # Process activity (returns AnalysisResult with raw/moving metrics)
-                analysis_result, _ = self.activity_service.process_activity(activity_row)
+                analysis_result, _ = self.activity_service.process_activity(
+                    activity_row
+                )
 
                 # Combine metadata with raw metrics
                 raw_enriched = {**activity_row.to_dict(), **analysis_result.raw_metrics}
@@ -354,7 +356,9 @@ class AnalysisService:
         tss_column = "training_stress_score"
 
         if tss_column not in df.columns:
-            self.logger.warning("No TSS column found, skipping training load calculation")
+            self.logger.warning(
+                "No TSS column found, skipping training load calculation"
+            )
             df["chronic_training_load"] = 0.0
             df["acute_training_load"] = 0.0
             df["training_stress_balance"] = 0.0
@@ -362,9 +366,13 @@ class AnalysisService:
             return df
 
         # Ensure date column exists
-        date_col = "start_date_local" if "start_date_local" in df.columns else "start_date"
+        date_col = (
+            "start_date_local" if "start_date_local" in df.columns else "start_date"
+        )
         if date_col not in df.columns:
-            self.logger.warning("No date column found, skipping training load calculation")
+            self.logger.warning(
+                "No date column found, skipping training load calculation"
+            )
             df["chronic_training_load"] = 0.0
             df["acute_training_load"] = 0.0
             df["training_stress_balance"] = 0.0
@@ -373,7 +381,7 @@ class AnalysisService:
 
         # Sort by date ASCENDING for chronological processing
         df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], format='ISO8601', utc=True)
+        df[date_col] = pd.to_datetime(df[date_col], format="ISO8601", utc=True)
         df = df.sort_values(date_col, ascending=True).reset_index(drop=True)
 
         # Time constants in days
@@ -403,7 +411,9 @@ class AnalysisService:
             else:
                 prev_date = dates[i - 1]
                 # Calculate days elapsed since previous activity
-                days_elapsed = (pd.Timestamp(current_date) - pd.Timestamp(prev_date)).days
+                days_elapsed = (
+                    pd.Timestamp(current_date) - pd.Timestamp(prev_date)
+                ).days
                 days_elapsed = max(days_elapsed, 0)  # Handle same-day activities
 
                 # Decay factors based on time elapsed
@@ -411,8 +421,8 @@ class AnalysisService:
                 ctl_decay = np.exp(-days_elapsed / ctl_tc)
                 atl_decay = np.exp(-days_elapsed / atl_tc)
 
-                # Update: new_value = old_value * decay + today_tss * (1 - decay_for_1_day)
-                # The (1 - exp(-1/tc)) factor represents the weight for a single day's TSS
+                # Update: new_value = old_value * decay + today_tss * weight
+                # Weight factor = 1 - exp(-1/tc) for single day's contribution
                 ctl_weight = 1 - np.exp(-1 / ctl_tc)
                 atl_weight = 1 - np.exp(-1 / atl_tc)
 
@@ -425,19 +435,21 @@ class AnalysisService:
         df["acute_training_load"] = atl_values
 
         # Calculate TSB (Training Stress Balance = CTL - ATL)
-        df["training_stress_balance"] = df["chronic_training_load"] - df["acute_training_load"]
+        df["training_stress_balance"] = (
+            df["chronic_training_load"] - df["acute_training_load"]
+        )
 
         # Calculate ACWR (Acute:Chronic Workload Ratio)
         df["acwr"] = np.where(
             df["chronic_training_load"] > 0,
             df["acute_training_load"] / df["chronic_training_load"],
-            0.0
+            0.0,
         )
 
         # Sort back to descending (most recent first) for export
         df = df.sort_values(date_col, ascending=False).reset_index(drop=True)
 
-        self.logger.info("Computed per-activity training load metrics with time-based decay (CTL, ATL, TSB, ACWR)")
+        self.logger.info("Computed training load metrics (CTL, ATL, TSB, ACWR)")
 
         return df
 
@@ -456,13 +468,16 @@ class AnalysisService:
             DataFrame with added CP model columns: cp, w_prime, cp_r_squared, aei
         """
         import numpy as np
+
         from ..metrics.power_curve import estimate_cp_wprime, interval_name_from_seconds
 
         # Get power curve column names
         power_curve_cols = [col for col in df.columns if col.startswith("power_curve_")]
 
         if not power_curve_cols:
-            self.logger.warning("No power curve columns found, skipping CP model calculation")
+            self.logger.warning(
+                "No power curve columns found, skipping CP model calculation"
+            )
             df["cp"] = np.nan
             df["w_prime"] = np.nan
             df["cp_r_squared"] = np.nan
@@ -470,7 +485,9 @@ class AnalysisService:
             return df
 
         # Ensure date column exists
-        date_col = "start_date_local" if "start_date_local" in df.columns else "start_date"
+        date_col = (
+            "start_date_local" if "start_date_local" in df.columns else "start_date"
+        )
         if date_col not in df.columns:
             self.logger.warning("No date column found, skipping CP model calculation")
             df["cp"] = np.nan
@@ -481,18 +498,20 @@ class AnalysisService:
 
         # Sort by date ASCENDING for chronological processing
         df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], format='ISO8601', utc=True)
+        df[date_col] = pd.to_datetime(df[date_col], format="ISO8601", utc=True)
         df = df.sort_values(date_col, ascending=True).reset_index(drop=True)
 
         # Get CP window from settings (configurable), fall back to constant if not set
-        cp_window_days = getattr(self.settings, 'cp_window_days', TrainingLoadWindows.CP_WINDOW_DAYS)
+        cp_window_days = getattr(
+            self.settings, "cp_window_days", TrainingLoadWindows.CP_WINDOW_DAYS
+        )
 
         # Map column names to durations (in seconds)
         col_to_duration = {}
         for col in power_curve_cols:
             # Extract duration from column name (e.g., "power_curve_5min" -> 300)
             duration_str = col.replace("power_curve_", "")
-            for interval_name, duration_sec in self.settings.power_curve_intervals.items():
+            for _, duration_sec in self.settings.power_curve_intervals.items():
                 if interval_name_from_seconds(duration_sec) == duration_str:
                     col_to_duration[col] = duration_sec
                     break
@@ -507,13 +526,15 @@ class AnalysisService:
         # Get rider weight for AEI calculation
         rider_weight = self.settings.rider_weight_kg
 
-        # For each activity, look back cp_window_days and find max power at each duration
+        # For each activity, find max power at each duration in rolling window
         for i in range(n):
             current_date = df.loc[i, date_col]
             window_start = current_date - pd.Timedelta(days=cp_window_days)
 
             # Get activities within the window (up to and including current activity)
-            window_mask = (df[date_col] >= window_start) & (df[date_col] <= current_date)
+            window_mask = (df[date_col] >= window_start) & (
+                df[date_col] <= current_date
+            )
             window_df = df[window_mask]
 
             # Need at least a few activities with power data
@@ -556,7 +577,7 @@ class AnalysisService:
         df = df.sort_values(date_col, ascending=False).reset_index(drop=True)
 
         self.logger.info(
-            f"Computed per-activity CP model metrics with {cp_window_days}-day rolling window"
+            f"Computed CP model metrics ({cp_window_days}-day rolling window)"
         )
 
         return df

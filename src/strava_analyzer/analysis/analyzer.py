@@ -107,7 +107,7 @@ class ActivityAnalyzer:
             # Split data into raw and moving DataFrames
             split_result = self.stream_splitter.split(stream_df)
 
-            # Calculate metrics for raw data (includes power curve and interval analysis)
+            # Calculate metrics for raw data (power curve + interval analysis)
             raw_metrics = self.metrics_calculator.compute_all_metrics(
                 split_result.raw_df,
                 activity_type.value.lower(),

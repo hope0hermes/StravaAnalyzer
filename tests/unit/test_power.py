@@ -50,9 +50,7 @@ class TestPowerCalculatorBasics:
         expected_power_per_kg = (
             metrics["average_power"] / settings_with_ftp.rider_weight_kg
         )
-        assert metrics["power_per_kg"] == pytest.approx(
-            expected_power_per_kg, rel=1e-3
-        )
+        assert metrics["power_per_kg"] == pytest.approx(expected_power_per_kg, rel=1e-3)
 
     def test_zero_power_returns_empty_metrics(self, settings_with_ftp: Settings):
         """Test that zero power data returns empty metrics."""

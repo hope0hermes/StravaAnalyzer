@@ -56,10 +56,9 @@ class Settings(BaseSettings):
         self._compute_hr_zones()
 
     def _compute_power_zones(self) -> None:
-        """
-        Compute power zones dynamically based on physiological thresholds.
+        """Compute power zones from physiological thresholds or FTP.
 
-        If lt1_power and lt2_power from stress test are available, uses LT-based 7-zone model:
+        Uses LT-based 7-zone model if available, else Coggan's percentage model.
         - Z1: 0 to LT1 (recovery)
         - Z2: LT1 to ~(LT1+LT2)/2 (endurance)
         - Z3: ~(LT1+LT2)/2 to LT2 (sweet spot)
@@ -130,8 +129,14 @@ class Settings(BaseSettings):
 
             self.hr_zone_ranges = {
                 "hr_zone_1": (0, int(self.lt1_hr)),  # Recovery: below LT1
-                "hr_zone_2": (int(self.lt1_hr), int(self.lt2_hr)),  # Endurance: LT1 to LT2
-                "hr_zone_3": (int(self.lt2_hr), int(self.fthr)),  # Threshold: LT2 to FTHR
+                "hr_zone_2": (
+                    int(self.lt1_hr),
+                    int(self.lt2_hr),
+                ),  # Endurance: LT1 to LT2
+                "hr_zone_3": (
+                    int(self.lt2_hr),
+                    int(self.fthr),
+                ),  # Threshold: LT2 to FTHR
                 "hr_zone_4": (int(self.fthr), max_hr),  # VO2max: FTHR to MaxHR
                 "hr_zone_5": (max_hr, float("inf")),  # Max: above MaxHR
             }
@@ -241,19 +246,27 @@ class Settings(BaseSettings):
 
     # --- Power Curve Model Configuration ---
     # Rolling window for CP/W' estimation (days)
-    cp_window_days: int = 90  # Look back this many days to find peak efforts for CP model
+    cp_window_days: int = (
+        90  # Look back this many days to find peak efforts for CP model
+    )
 
     # --- Running Metrics Configuration ---
     fthr: float = 170  # Default FTHR, should be overridden by user
-    lt1_hr: float | None = None  # Lactate Threshold 1 HR (lower threshold, from stress test)
-    lt2_hr: float | None = None  # Lactate Threshold 2 HR (upper threshold, from stress test)
+    lt1_hr: float | None = (
+        None  # Lactate Threshold 1 HR (lower threshold, from stress test)
+    )
+    lt2_hr: float | None = (
+        None  # Lactate Threshold 2 HR (upper threshold, from stress test)
+    )
     ftpace: float = 5.0  # Default FTPace in min/km, should be overridden by user
     ftp: float = 285  # Default FTP in watts, should be overridden by user
 
     # --- Critical Power & Anaerobic Capacity ---
     # Used for W' balance calculations and anaerobic capacity modeling
     cp: float = 0.0  # Critical Power in watts (0 = disabled). Estimate: FTP × 0.88
-    w_prime: float = 0.0  # W-prime (anaerobic capacity) in joules (0 = disabled). Typical: 20,000 J
+    w_prime: float = (
+        0.0  # W-prime (anaerobic capacity) in joules (0 = disabled). Typical: 20,000 J
+    )
 
     # --- Cycling Power Lactate Thresholds (from stress test) ---
     lt1_power: float | None = None  # Power at LT1 (lower threshold), from stress test
@@ -286,7 +299,7 @@ class Settings(BaseSettings):
             List of power zone right edge values
         """
         edges = []
-        for zone_name, (left, right) in self.power_zones.items():
+        for _, (_, right) in self.power_zones.items():
             if right != float("inf"):
                 edges.append(float(right))
         return sorted(edges)
@@ -301,7 +314,7 @@ class Settings(BaseSettings):
             List of HR zone right edge values
         """
         edges = []
-        for zone_name, (left, right) in self.hr_zone_ranges.items():
+        for _, (_, right) in self.hr_zone_ranges.items():
             if right != float("inf"):
                 edges.append(float(right))
         return sorted(edges)

@@ -63,12 +63,9 @@ class FatigueCalculator(BaseMetricCalculator):
         return metrics
 
     def _calculate_fatigue_index(self, df: pd.DataFrame) -> dict[str, float]:
-        """
-        Calculate fatigue index from power decay between halves.
+        """Calculate fatigue index from power decay between halves.
 
-        Fatigue Index = (First Half Power - Second Half Power) / First Half Power × 100
-
-        Note: This is the absolute value of power_drift, representing magnitude of power loss.
+        Fatigue Index = (FHalf Power - SHalf Power) / FHalf Power × 100
         Uses time-weighted averaging for accurate power calculations.
 
         Args:
@@ -103,8 +100,8 @@ class FatigueCalculator(BaseMetricCalculator):
 
         return {
             "fatigue_index": fatigue_index,
-            "initial_5min_power": first_half_power,  # Keep field name for backwards compatibility
-            "final_5min_power": second_half_power,  # Keep field name for backwards compatibility
+            "initial_5min_power": first_half_power,  # backwards compat
+            "final_5min_power": second_half_power,  # backwards compat
         }
 
     def _calculate_half_comparison(self, df: pd.DataFrame) -> dict[str, float]:

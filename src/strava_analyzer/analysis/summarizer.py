@@ -80,10 +80,14 @@ class ActivitySummarizer:
         df[tss_column] = df[tss_column].fillna(0)
 
         # Calculate CTL (chronic training load - 42-day exponential average)
-        df["ctl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.CTL_DAYS, adjust=False).mean()
+        df["ctl_score"] = (
+            df[tss_column].ewm(span=TrainingLoadWindows.CTL_DAYS, adjust=False).mean()
+        )
 
         # Calculate ATL (acute training load - 7-day exponential average)
-        df["atl_score"] = df[tss_column].ewm(span=TrainingLoadWindows.ATL_DAYS, adjust=False).mean()
+        df["atl_score"] = (
+            df[tss_column].ewm(span=TrainingLoadWindows.ATL_DAYS, adjust=False).mean()
+        )
 
         # Get most recent values (last row after ascending sort)
         if len(df) > 0:
@@ -100,7 +104,89 @@ class ActivitySummarizer:
             acute_training_load=atl,
             training_stress_balance=tsb,
             acwr=acwr,
+            monotony_index=self._calculate_monotony_index(df, tss_column),
+            strain_index=self._calculate_strain_index(df, tss_column),
         )
+
+    def _calculate_monotony_index(
+        self, df: pd.DataFrame, tss_column: str, days: int = 7
+    ) -> float:
+        """
+        Calculate training monotony index.
+
+        Monotony = mean(daily TSS) / std(daily TSS)
+        Lower is better - indicates more training variety.
+
+        Thresholds:
+        - <1.5: Safe (good variety)
+        - 1.5-2.0: Monitor (moderate risk)
+        - >2.0: High risk (too repetitive)
+
+        Reference: Foster (1998)
+
+        Args:
+            df: DataFrame with TSS values
+            tss_column: Name of TSS column
+            days: Number of days to analyze (default 7 for weekly)
+
+        Returns:
+            Monotony index value
+        """
+        if df.empty or tss_column not in df.columns:
+            return 0.0
+
+        # Get last N days of data
+        df = df.sort_values("start_date", ascending=False).head(days)
+
+        tss_values = df[tss_column].dropna()
+        if len(tss_values) < 2:
+            return 0.0
+
+        mean_tss = tss_values.mean()
+        std_tss = tss_values.std(ddof=1)
+
+        if std_tss == 0 or pd.isna(std_tss):
+            return float("inf") if mean_tss > 0 else 0.0
+
+        return float(mean_tss / std_tss)
+
+    def _calculate_strain_index(
+        self, df: pd.DataFrame, tss_column: str, days: int = 7
+    ) -> float:
+        """
+        Calculate training strain index.
+
+        Strain = Weekly TSS × Monotony Index
+        Combines total load with training variety.
+
+        Thresholds:
+        - <3000: Manageable
+        - 3000-6000: Moderate strain
+        - >6000: High strain
+
+        Reference: Foster (1998)
+
+        Args:
+            df: DataFrame with TSS values
+            tss_column: Name of TSS column
+            days: Number of days to analyze
+
+        Returns:
+            Strain index value
+        """
+        if df.empty or tss_column not in df.columns:
+            return 0.0
+
+        # Get last N days of data
+        df = df.sort_values("start_date", ascending=False).head(days)
+
+        weekly_tss = df[tss_column].dropna().sum()
+        monotony = self._calculate_monotony_index(df, tss_column, days)
+
+        if monotony == float("inf"):
+            return float("inf")
+
+        return float(weekly_tss * monotony)
 
     def _calculate_performance_trends(
         self, activities_df: pd.DataFrame, rolling_window: str = "28D"
@@ -257,13 +343,17 @@ class ActivitySummarizer:
 
         # Ensure start_date and end_date are datetime objects
         if start_date and not isinstance(start_date, pd.Timestamp):
-            start_date = pd.to_datetime(start_date, format='ISO8601', utc=True)
+            start_date = pd.to_datetime(start_date, format="ISO8601", utc=True)
         if end_date and not isinstance(end_date, pd.Timestamp):
-            end_date = pd.to_datetime(end_date, format='ISO8601', utc=True)
+            end_date = pd.to_datetime(end_date, format="ISO8601", utc=True)
 
         # Ensure the date column is datetime
-        if "start_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["start_date"]):
-            df["start_date"] = pd.to_datetime(df["start_date"], format='ISO8601', utc=True)
+        if "start_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(
+            df["start_date"]
+        ):
+            df["start_date"] = pd.to_datetime(
+                df["start_date"], format="ISO8601", utc=True
+            )
 
         if start_date:
             df = df[df["start_date"] >= start_date]

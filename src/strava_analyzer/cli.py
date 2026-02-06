@@ -131,9 +131,9 @@ def run(
         logger.info(f"Successfully processed {summary['total_activities']} activities")
 
         # Display summary statistics
-        click.echo("\n" + "="*50)
+        click.echo("\n" + "=" * 50)
         click.echo("ANALYSIS COMPLETE")
-        click.echo("="*50)
+        click.echo("=" * 50)
         click.echo(f"\nTotal Activities: {summary['total_activities']}")
         click.echo(f"Training Load Status: {summary['training_load']['status']}")
         click.echo(f"CTL: {summary['training_load']['ctl']:.1f}")

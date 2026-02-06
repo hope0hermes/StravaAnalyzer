@@ -71,7 +71,7 @@ class ActivityService:
             activity_row: Series containing activity metadata
 
         Returns:
-            Tuple of (AnalysisResult with raw/moving metrics, processed stream DataFrame)
+            Tuple of (AnalysisResult, processed stream DataFrame)
 
         Raises:
             DataLoadError: If data loading fails

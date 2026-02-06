@@ -94,6 +94,12 @@ class TrainingLoadSummary(BaseModel):
     acute_training_load: float = Field(..., description="ATL (7-day fatigue)")
     training_stress_balance: float = Field(..., description="TSB (freshness)")
     acwr: float = Field(..., description="Acute:Chronic Workload Ratio")
+    monotony_index: float = Field(
+        default=0.0, description="Training monotony (mean TSS / std TSS)"
+    )
+    strain_index: float = Field(
+        default=0.0, description="Training strain (weekly TSS × monotony)"
+    )
 
     @property
     def status(self) -> str:

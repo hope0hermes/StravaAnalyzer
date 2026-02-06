@@ -14,7 +14,6 @@ import logging
 import numpy as np
 import pandas as pd
 
-from ..constants import TimeConstants
 from .base import BaseMetricCalculator
 
 logger = logging.getLogger(__name__)
@@ -67,7 +66,9 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
 
             # Cardiac drift (requires HR data)
             if "heartrate" in stream_df.columns:
-                cardiac_drift, first_half_hr, second_half_hr = self._calculate_cardiac_drift(stream_df)
+                cardiac_drift, first_half_hr, second_half_hr = (
+                    self._calculate_cardiac_drift(stream_df)
+                )
                 metrics["cardiac_drift"] = cardiac_drift
                 metrics["first_half_hr"] = first_half_hr
                 metrics["second_half_hr"] = second_half_hr
@@ -181,7 +182,6 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
                 w_balance[i] = w_balance[i - 1] - w_expended
             else:
                 # Below CP: recover W' (simplified exponential recovery)
-                recovery_rate = (cp - power[i]) / cp
                 tau = 546 * np.exp(-0.01 * (cp - power[i])) + 316  # Skiba model
                 w_recovered = (w_prime - w_balance[i - 1]) * (1 - np.exp(-1 / tau))
                 w_balance[i] = w_balance[i - 1] + w_recovered
@@ -261,7 +261,9 @@ class AdvancedPowerCalculator(BaseMetricCalculator):
 
         return float(np_value) if not np.isnan(np_value) else 0.0
 
-    def _calculate_cardiac_drift(self, stream_df: pd.DataFrame) -> tuple[float, float, float]:
+    def _calculate_cardiac_drift(
+        self, stream_df: pd.DataFrame
+    ) -> tuple[float, float, float]:
         """
         Calculate cardiac drift (HR increase from 1st half to 2nd half).
 

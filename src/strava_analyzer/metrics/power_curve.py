@@ -71,7 +71,7 @@ def estimate_cp_wprime(
 
     Args:
         mmp_data: List of (duration, power) tuples
-        ftp: Optional FTP value to improve initial guess for CP (typically CP ≈ 0.88 * FTP)
+        ftp: Optional FTP (CP ≈ 0.88 * FTP)
 
     Returns:
         Dictionary with 'cp', 'w_prime', and 'r_squared' keys
