@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-02-07
+
+### Changed
+- fix: document v1.4.0 release changes in unreleased section with detailed breakdown (#33)
+- docs: expand CHANGELOG PR #30 with detailed constituent commits breakdown (#32)
+
+
 ### Added
 - Monotony index metric for workout consistency analysis
 
