@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Monotony index metric for workout consistency analysis
+
+### Fixed
+- Critical power approximation accuracy
+- Time-weighted methods for zone distributions, TID, and climbing time
+- Test failures in CP fit validation
+- Linting issues in test files
+
+### Changed
+- Refactored to use raw and moving input files for activity details
+- Sign convention alignment between power and HR drift metrics
+- Added critical power setting to configuration
+- Minor code cleanup and consolidation of power-related metrics
+
 ## [1.4.0] - 2026-02-06
 
 ### Added
