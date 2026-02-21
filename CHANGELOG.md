@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (legacy from prefix-based approach, now using separate output files)
 - Author email typo in pyproject.toml (missing `.com`)
 
+## [1.4.1] - 2026-02-07
+
+### Changed
+- fix: document v1.4.0 release changes in unreleased section with detailed breakdown (#33)
+- docs: expand CHANGELOG PR #30 with detailed constituent commits breakdown (#32)
+
+
+### Added
+- Monotony index metric for workout consistency analysis
+
+### Fixed
+- Critical power approximation accuracy
+- Time-weighted methods for zone distributions, TID, and climbing time
+- Test failures in CP fit validation
+- Linting issues in test files
+
+### Changed
+- Refactored to use raw and moving input files for activity details
+- Sign convention alignment between power and HR drift metrics
+- Added critical power setting to configuration
+- Minor code cleanup and consolidation of power-related metrics
+
 ## [1.4.0] - 2026-02-06
 
 ### Added
