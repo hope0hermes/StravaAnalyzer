@@ -317,7 +317,9 @@ class AnalysisService:
             moving_df = moving_df.loc[moving_dates < cutoff].reset_index(drop=True)
 
         self.logger.info(
-            "Pruned %d activities from %s onward for recomputation.", removed, recompute_from,
+            "Pruned %d activities from %s onward for recomputation.",
+            removed,
+            recompute_from,
         )
         return raw_df, moving_df
 

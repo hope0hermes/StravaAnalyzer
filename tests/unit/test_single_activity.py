@@ -1,6 +1,5 @@
 """Tests for single-activity processing (Phase 5)."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd

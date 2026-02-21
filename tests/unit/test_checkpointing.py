@@ -2,17 +2,15 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from strava_analyzer.constants import CSVConstants
 from strava_analyzer.services.analysis_service import (
     DEFAULT_CHECKPOINT_INTERVAL,
     AnalysisService,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -290,7 +288,7 @@ class TestSaveResultsCheckpointCleanup:
 
 class TestDefaultCheckpointInterval:
     def test_default_value(self, tmp_path):
-        settings = _make_settings(tmp_path)
+        _make_settings(tmp_path)
         # We can't call __init__ because it would try to instantiate real
         # sub-services, so just test the constant.
         assert DEFAULT_CHECKPOINT_INTERVAL == 50

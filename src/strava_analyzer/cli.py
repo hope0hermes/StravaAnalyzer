@@ -85,8 +85,10 @@ def main():
     type=str,
     default=None,
     help=(
-        "Re-process activities from this date onward (ISO-8601, e.g. 2024-06-01). "
-        "Useful after changing FTP/FTHR/weight without re-processing the entire history."
+        "Re-process activities from this date onward "
+        "(ISO-8601, e.g. 2024-06-01). "
+        "Useful after changing FTP/FTHR/weight without "
+        "re-processing the entire history."
     ),
 )
 def run(
@@ -121,7 +123,7 @@ def run(
         pipeline = Pipeline(settings)
 
         # Load activities
-        activities_df = pd.read_csv(
+        pd.read_csv(
             settings.activities_file,
             parse_dates=["start_date"],
             sep=CSVConstants.DEFAULT_SEPARATOR,

@@ -193,9 +193,6 @@ class CSVConstants:
 class MetricPrefixes:
     """Standard prefixes for metric names."""
 
-    RAW: Final[str] = "raw_"
-    MOVING: Final[str] = "moving_"
-
     # Zone prefixes
     POWER_ZONE: Final[str] = "power_zone_"
     HR_ZONE: Final[str] = "hr_zone_"

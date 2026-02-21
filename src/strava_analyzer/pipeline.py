@@ -16,7 +16,7 @@ import pandas as pd
 
 from .constants import CSVConstants
 from .exceptions import ProcessingError
-from .services import AnalysisService
+from .services import AnalysisService, DualAnalysisResult
 from .settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class Pipeline:
         self.analysis_service = AnalysisService(settings)
         self.logger = logging.getLogger(__name__)
 
-    def run(self, *, recompute_from: str | None = None) -> None:
+    def run(self, *, recompute_from: str | None = None) -> DualAnalysisResult:
         """
         Execute the complete analysis pipeline.
 
@@ -56,6 +56,9 @@ class Pipeline:
             recompute_from: Optional ISO-8601 date (e.g. ``"2024-06-01"``).
                 Activities on or after this date are re-processed with the
                 current settings.
+
+        Returns:
+            DualAnalysisResult with raw_df, moving_df, and summary.
 
         Raises:
             ProcessingError: If pipeline execution fails
@@ -78,6 +81,8 @@ class Pipeline:
             self.logger.info(f"Total activities (raw): {len(result.raw_df)}")
             self.logger.info(f"Total activities (moving): {len(result.moving_df)}")
             self.logger.info("=" * 60)
+
+            return result
 
         except Exception as e:
             self.logger.error(f"Pipeline failed: {e}")

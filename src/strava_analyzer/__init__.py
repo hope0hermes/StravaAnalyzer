@@ -3,7 +3,12 @@
 __version__ = "1.4.0"
 
 from . import analysis, constants, data, exceptions, metrics, models, services
-from .analysis import ActivityAnalyzer, ActivitySummarizer, ThresholdEstimator
+from .analysis import (
+    ActivityAnalyzer,
+    ActivitySummarizer,
+    AnalysisResult,
+    ThresholdEstimator,
+)
 from .data import ActivityDataLoader, ActivityRepository, StreamDataProcessor
 from .metrics import (
     EfficiencyCalculator,
@@ -24,7 +29,8 @@ from .models import (
     TrainingLoadSummary,
 )
 from .pipeline import Pipeline
-from .services import ActivityService, AnalysisService
+from .services import ActivityService, AnalysisService, DualAnalysisResult
+from .settings import Settings, load_settings
 
 
 def get_version() -> str:
@@ -67,13 +73,18 @@ __all__ = [
     "StreamDataProcessor",
     # Analysis Layer
     "ActivityAnalyzer",
+    "AnalysisResult",
     "ActivitySummarizer",
     "ThresholdEstimator",
     # Services
     "ActivityService",
     "AnalysisService",
+    "DualAnalysisResult",
     # Pipeline
     "Pipeline",
+    # Settings
+    "Settings",
+    "load_settings",
     # Modules
     "analysis",
     "constants",

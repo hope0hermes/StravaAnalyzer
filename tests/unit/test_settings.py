@@ -61,9 +61,9 @@ class TestSettingsBasicLoading:
         """Test that settings use default values when no config is provided."""
         settings = Settings()
 
-        assert settings.ftp == 285  # Default FTP
-        assert settings.fthr == 170  # Default FTHR
-        assert settings.rider_weight_kg == 77.0
+        assert settings.ftp == 0  # Default FTP (unconfigured)
+        assert settings.fthr == 0  # Default FTHR (unconfigured)
+        assert settings.rider_weight_kg == 0.0
         assert settings.data_dir == Path("data")
 
 
@@ -223,8 +223,8 @@ class TestSettingsEdgeCases:
 
         settings = load_settings(config_file=temp_config_file)
 
-        assert settings.ftp == 285  # Default value
-        assert settings.fthr == 170  # Default value
+        assert settings.ftp == 0  # Default value (unconfigured)
+        assert settings.fthr == 0  # Default value (unconfigured)
 
 
 class TestSettingsComplexConfiguration:
@@ -323,13 +323,11 @@ class TestHRZoneThreeTierModel:
         )
 
     def test_tier3_zones_not_computed_when_neither_fthr_nor_max_hr(self):
-        """No zone computation when both fthr=0 and max_hr=0; defaults preserved."""
-        # Default hr_zone_ranges should be returned unchanged
+        """No zone computation when both fthr=0 and max_hr=0; zones stay empty."""
         settings = Settings(fthr=0, max_hr=0)
 
-        # Should keep default hardcoded hr_zone_ranges (not crash, not recompute)
-        assert "hr_zone_1" in settings.hr_zone_ranges
-        assert len(settings.hr_zone_ranges) == 5
+        # With no physiological data configured, zones remain empty
+        assert settings.hr_zone_ranges == {}
 
     def test_tier1_takes_priority_over_tier2(self):
         """Tier 1 (LT-based) takes priority when lt values are provided."""

@@ -4,10 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from strava_analyzer.services.analysis_service import AnalysisService
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -76,7 +76,7 @@ class Settings(BaseSettings):
         Otherwise falls back to Coggan's percentage-based 7-zone model based on FTP.
         """
         if self.ftp <= 0:
-            # If FTP not set, don't override existing zones
+            # No valid FTP configured — zones remain empty
             return
 
         # Use LT-based model if LT1 and LT2 power are provided
@@ -136,7 +136,7 @@ class Settings(BaseSettings):
           - Z5 (VO2max+): 90-100% max HR
         """
         if self.fthr <= 0 and self.max_hr <= 0:
-            # No valid HR inputs configured — keep existing default zones
+            # No valid HR inputs configured — zones remain empty
             return
 
         # Tier 1: LT-based model (most precise)
@@ -145,11 +145,11 @@ class Settings(BaseSettings):
             upper_hr = self.max_hr if self.max_hr > 0 else int(self.fthr + 6)
 
             self.hr_zone_ranges = {
-                "hr_zone_1": (0, int(self.lt1_hr)),              # Recovery: below LT1
-                "hr_zone_2": (int(self.lt1_hr), int(self.lt2_hr)),  # Endurance: LT1-LT2
-                "hr_zone_3": (int(self.lt2_hr), int(self.fthr)),    # Threshold: LT2-FTHR
-                "hr_zone_4": (int(self.fthr), upper_hr),            # VO2max: FTHR-MaxHR
-                "hr_zone_5": (upper_hr, float("inf")),              # Max: above MaxHR
+                "hr_zone_1": (0, int(self.lt1_hr)),
+                "hr_zone_2": (int(self.lt1_hr), int(self.lt2_hr)),
+                "hr_zone_3": (int(self.lt2_hr), int(self.fthr)),
+                "hr_zone_4": (int(self.fthr), upper_hr),
+                "hr_zone_5": (upper_hr, float("inf")),
             }
 
         # Tier 2: Coggan percentage-based model
@@ -198,28 +198,15 @@ class Settings(BaseSettings):
         "speed_zone_4": (30, float("inf")),
     }
 
-    # --- Power Zones (based on 285W FTP) ---
-    # These should ideally be dynamic based on the athlete's current FTP
-    # Using Coggan's 7-zone model (computed dynamically in __init__)
-    power_zones: dict[str, tuple[float, float]] = {
-        "power_zone_1": (0, 157),
-        "power_zone_2": (157, 214),
-        "power_zone_3": (214, 256),
-        "power_zone_4": (256, 299),
-        "power_zone_5": (299, 342),
-        "power_zone_6": (342, 427),
-        "power_zone_7": (427, float("inf")),
-    }
+    # --- Power Zones ---
+    # Computed dynamically in __init__ when FTP is configured.
+    # Left empty by default; populated by _compute_power_zones().
+    power_zones: dict[str, tuple[float, float]] = {}
 
-    # --- Heart Rate Zones (computed dynamically in __init__) ---
-    # Default values are overwritten by _compute_hr_zones()
-    hr_zone_ranges: dict[str, tuple[float, float]] = {
-        "hr_zone_1": (0, 129),
-        "hr_zone_2": (129, 155),
-        "hr_zone_3": (155, 170),
-        "hr_zone_4": (170, 176),
-        "hr_zone_5": (176, float("inf")),
-    }
+    # --- Heart Rate Zones ---
+    # Computed dynamically in __init__ when FTHR or max_hr is configured.
+    # Left empty by default; populated by _compute_hr_zones().
+    hr_zone_ranges: dict[str, tuple[float, float]] = {}
 
     # --- Cadence Zones (example, adjust as needed) ---
     cadence_zones: dict[str, tuple[float, float]] = {
@@ -273,15 +260,15 @@ class Settings(BaseSettings):
     )
 
     # --- Running Metrics Configuration ---
-    fthr: float = 170  # Default FTHR, should be overridden by user
+    fthr: float = 0  # Functional Threshold Heart Rate (0 = not configured)
     lt1_hr: float | None = (
         None  # Lactate Threshold 1 HR (lower threshold, from stress test)
     )
     lt2_hr: float | None = (
         None  # Lactate Threshold 2 HR (upper threshold, from stress test)
     )
-    ftpace: float = 5.0  # Default FTPace in min/km, should be overridden by user
-    ftp: float = 285  # Default FTP in watts, should be overridden by user
+    ftpace: float = 0.0  # FTPace in min/km (0 = not configured)
+    ftp: float = 0  # Functional Threshold Power in watts (0 = not configured)
 
     # --- Critical Power & Anaerobic Capacity ---
     # Used for W' balance calculations and anaerobic capacity modeling
@@ -309,7 +296,7 @@ class Settings(BaseSettings):
     ctl_days: int = 28  # Aligned with Analysis_plan.md
 
     # --- Rider Weight ---
-    rider_weight_kg: float = 77.0
+    rider_weight_kg: float = 0.0  # Athlete weight in kg (0 = not configured)
 
     # --- Maximum Heart Rate ---
     # Used as fallback for HR zone calculations when FTHR is not configured.
