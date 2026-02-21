@@ -225,3 +225,9 @@ src/strava_analyzer/
 ```
 
 [1.0.0]: https://github.com/hope0hermes/StravaAnalyzer/releases/tag/v1.0.0
+
+## [1.5.0] - 2026-02-21
+
+### Changed
+- feat: prepare to be added as ActivitiesViewer dependency (#35)
+
