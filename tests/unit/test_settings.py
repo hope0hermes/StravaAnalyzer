@@ -268,3 +268,140 @@ class TestSettingsComplexConfiguration:
         assert settings.rider_weight_kg == 80.0
         assert settings.atl_days == 7
         assert settings.ctl_days == 28
+
+
+class TestHRZoneThreeTierModel:
+    """Test the three-tier HR zone model: LT-based > FTHR % > max-HR %."""
+
+    def test_tier1_lt_based_zones_when_all_provided(self):
+        """Tier 1: LT-based zones when lt1_hr + lt2_hr + fthr are all provided."""
+        settings = Settings(fthr=170, lt1_hr=129, lt2_hr=155)
+
+        assert settings.hr_zone_ranges["hr_zone_1"] == (0, 129)
+        assert settings.hr_zone_ranges["hr_zone_2"] == (129, 155)
+        assert settings.hr_zone_ranges["hr_zone_3"] == (155, 170)
+        # Z4 upper: fthr + 6 (estimated max_hr when max_hr=0)
+        assert settings.hr_zone_ranges["hr_zone_4"][0] == 170
+        assert settings.hr_zone_ranges["hr_zone_5"][1] == float("inf")
+
+    def test_tier1_uses_configured_max_hr_for_upper_bound(self):
+        """Tier 1: Uses configured max_hr for Z4/Z5 boundary when provided."""
+        settings = Settings(fthr=170, lt1_hr=129, lt2_hr=155, max_hr=190)
+
+        # Z4 should go up to the real max_hr, not the estimate
+        assert settings.hr_zone_ranges["hr_zone_4"] == (170, 190)
+        assert settings.hr_zone_ranges["hr_zone_5"] == (190, float("inf"))
+
+    def test_tier2_coggan_zones_when_only_fthr(self):
+        """Tier 2: Coggan %-based zones when only fthr is provided (no LT HR)."""
+        settings = Settings(fthr=170)
+
+        # No lt1_hr/lt2_hr → falls through to Coggan %
+        assert settings.hr_zone_ranges["hr_zone_1"] == (0, int(0.85 * 170))
+        assert settings.hr_zone_ranges["hr_zone_2"] == (
+            int(0.85 * 170), int(0.95 * 170)
+        )
+        assert settings.hr_zone_ranges["hr_zone_5"][1] == float("inf")
+        assert len(settings.hr_zone_ranges) == 5
+
+    def test_tier3_max_hr_zones_when_only_max_hr(self):
+        """Tier 3: Max-HR %-based zones when only max_hr is provided (no fthr)."""
+        settings = Settings(fthr=0, max_hr=190)
+
+        assert settings.hr_zone_ranges["hr_zone_1"] == (0, int(0.60 * 190))
+        assert settings.hr_zone_ranges["hr_zone_2"] == (
+            int(0.60 * 190), int(0.70 * 190)
+        )
+        assert settings.hr_zone_ranges["hr_zone_3"] == (
+            int(0.70 * 190), int(0.80 * 190)
+        )
+        assert settings.hr_zone_ranges["hr_zone_4"] == (
+            int(0.80 * 190), int(0.90 * 190)
+        )
+        assert settings.hr_zone_ranges["hr_zone_5"] == (
+            int(0.90 * 190), float("inf")
+        )
+
+    def test_tier3_zones_not_computed_when_neither_fthr_nor_max_hr(self):
+        """No zone computation when both fthr=0 and max_hr=0; defaults preserved."""
+        # Default hr_zone_ranges should be returned unchanged
+        settings = Settings(fthr=0, max_hr=0)
+
+        # Should keep default hardcoded hr_zone_ranges (not crash, not recompute)
+        assert "hr_zone_1" in settings.hr_zone_ranges
+        assert len(settings.hr_zone_ranges) == 5
+
+    def test_tier1_takes_priority_over_tier2(self):
+        """Tier 1 (LT-based) takes priority when lt values are provided."""
+        settings_lt = Settings(fthr=170, lt1_hr=129, lt2_hr=155)
+        settings_coggan = Settings(fthr=170)
+
+        # Z1 upper differs: LT uses lt1_hr=129, Coggan uses 0.85*170=144
+        assert settings_lt.hr_zone_ranges["hr_zone_1"][1] == 129
+        assert settings_coggan.hr_zone_ranges["hr_zone_1"][1] == int(0.85 * 170)
+
+    def test_tier2_takes_priority_over_tier3(self):
+        """Tier 2 (Coggan) takes priority over Tier 3 when fthr > 0."""
+        settings_coggan = Settings(fthr=170, max_hr=190)
+
+        # fthr > 0 → Coggan, not max_hr %
+        assert settings_coggan.hr_zone_ranges["hr_zone_1"][1] == int(0.85 * 170)
+        # NOT int(0.60 * 190)
+        assert settings_coggan.hr_zone_ranges["hr_zone_1"][1] != int(0.60 * 190)
+
+
+class TestEffectiveFthr:
+    """Test the effective_fthr property."""
+
+    def test_returns_fthr_when_configured(self):
+        """effective_fthr returns fthr when fthr > 0."""
+        settings = Settings(fthr=170, max_hr=190)
+        assert settings.effective_fthr == 170.0
+
+    def test_estimates_from_max_hr_when_fthr_zero(self):
+        """effective_fthr estimates FTHR from max_hr when fthr=0."""
+        settings = Settings(fthr=0, max_hr=190)
+        expected = round(0.89 * 190, 1)
+        assert settings.effective_fthr == expected
+
+    def test_returns_zero_when_neither_configured(self):
+        """effective_fthr returns 0 when both fthr=0 and max_hr=0."""
+        settings = Settings(fthr=0, max_hr=0)
+        assert settings.effective_fthr == 0.0
+
+    def test_fthr_takes_priority_over_max_hr_estimate(self):
+        """fthr is always preferred over the max_hr estimate."""
+        settings_a = Settings(fthr=165, max_hr=190)
+        settings_b = Settings(fthr=0, max_hr=190)
+
+        assert settings_a.effective_fthr == 165.0
+        assert settings_b.effective_fthr == round(0.89 * 190, 1)
+        assert settings_a.effective_fthr != settings_b.effective_fthr
+
+
+class TestMaxHrField:
+    """Test the max_hr field behaviour."""
+
+    def test_default_max_hr_is_zero(self):
+        """max_hr defaults to 0 (not configured)."""
+        settings = Settings()
+        assert settings.max_hr == 0
+
+    def test_max_hr_can_be_set(self):
+        """max_hr can be configured directly."""
+        settings = Settings(max_hr=188)
+        assert settings.max_hr == 188
+
+    def test_max_hr_loaded_from_yaml(self, temp_config_file):
+        """max_hr is read from YAML config."""
+        import yaml as _yaml
+
+        config_data = {"fthr": 0, "max_hr": 195, "ftp": 285}
+        with open(temp_config_file, "w") as f:
+            _yaml.dump(config_data, f)
+
+        settings = load_settings(config_file=temp_config_file)
+
+        assert settings.max_hr == 195
+        # Should have used Tier 3 zones
+        assert settings.hr_zone_ranges["hr_zone_1"] == (0, int(0.60 * 195))

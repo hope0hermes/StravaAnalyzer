@@ -163,12 +163,16 @@ class ZoneEdgesManager:
             f"Closest activity: {closest_date} at index {closest_idx}"
         )
 
-        # Set zone edge columns on the closest activity
+        # Set zone edge columns on the closest activity.
+        # Only fill if not already set — preserve zone edges on activities that were
+        # processed in a previous run with their original settings.
         for i, power_edge in enumerate(power_edges):
-            df.at[closest_idx, zone_cols["power_zone_cols"][i]] = float(power_edge)
+            if pd.isna(df.at[closest_idx, zone_cols["power_zone_cols"][i]]):
+                df.at[closest_idx, zone_cols["power_zone_cols"][i]] = float(power_edge)
 
         for i, hr_edge in enumerate(hr_edges):
-            df.at[closest_idx, zone_cols["hr_zone_cols"][i]] = float(hr_edge)
+            if pd.isna(df.at[closest_idx, zone_cols["hr_zone_cols"][i]]):
+                df.at[closest_idx, zone_cols["hr_zone_cols"][i]] = float(hr_edge)
 
         # Backpropagate to older activities (lower indices after sorting desc)
         # In descending date order, older activities are at higher indices

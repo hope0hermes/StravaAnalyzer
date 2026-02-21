@@ -47,8 +47,10 @@ class ZoneCalculator(BaseMetricCalculator):
             for zone_name, percentage in power_zones.items():
                 metrics[f"{zone_name}_percentage"] = percentage
 
-        # Calculate HR zones if available
-        if "heartrate" in stream_df.columns and self.settings.fthr > 0:
+        # Calculate HR zones if available (fthr or max_hr is sufficient)
+        if "heartrate" in stream_df.columns and (
+            self.settings.fthr > 0 or self.settings.max_hr > 0
+        ):
             hr_zones = self._calculate_hr_zones(stream_df["heartrate"], stream_df)
             for zone_name, percentage in hr_zones.items():
                 metrics[f"{zone_name}_percentage"] = percentage

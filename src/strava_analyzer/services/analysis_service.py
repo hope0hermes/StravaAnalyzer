@@ -13,6 +13,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 import pandas as pd
@@ -27,6 +28,9 @@ from ..settings import Settings
 from .activity_service import ActivityService
 
 logger = logging.getLogger(__name__)
+
+# Default number of activities between checkpoint saves
+DEFAULT_CHECKPOINT_INTERVAL = 50
 
 
 @dataclass
@@ -66,12 +70,14 @@ class AnalysisService:
     - Saving results to separate output files
     """
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, checkpoint_interval: int | None = None):
         """
         Initialize the analysis service.
 
         Args:
             settings: Application settings
+            checkpoint_interval: Number of activities between checkpoint saves.
+                Defaults to ``DEFAULT_CHECKPOINT_INTERVAL`` (50).
         """
         self.settings = settings
         self.logger = logging.getLogger(__name__)
@@ -83,9 +89,25 @@ class AnalysisService:
         self.summarizer = ActivitySummarizer(settings)
         self.zone_edges_manager = ZoneEdgesManager(settings)
 
-    def run_analysis(self) -> DualAnalysisResult:
+        # Checkpointing
+        self.checkpoint_interval = (
+            checkpoint_interval
+            if checkpoint_interval is not None
+            else DEFAULT_CHECKPOINT_INTERVAL
+        )
+        self._checkpoint_dir = self.settings.processed_data_dir
+
+    def run_analysis(self, *, recompute_from: str | None = None) -> DualAnalysisResult:
         """
         Run the complete analysis workflow.
+
+        Args:
+            recompute_from: Optional ISO-8601 date string (e.g. ``"2024-06-01"``).
+                When provided, activities with ``start_date_local >= recompute_from``
+                are stripped from the existing enriched data so that the
+                incremental logic re-processes them with the current settings.
+                This is useful after changing FTP/FTHR/weight without having
+                to force-reprocess the entire history.
 
         Returns:
             DualAnalysisResult with raw_df, moving_df, and summary
@@ -99,8 +121,19 @@ class AnalysisService:
             self.logger.info("Starting analysis workflow")
             raw_df, moving_df, historical_thresholds = self._load_existing_data()
 
-            # Get activities to process
-            activities_to_process = self.activity_service.get_activities_to_process()
+            # ---- Selective pruning for --recompute-from ----
+            if recompute_from is not None and raw_df is not None:
+                raw_df, moving_df = self._prune_activities_from_date(
+                    raw_df, moving_df, recompute_from
+                )
+
+            # Get activities to process — pass current raw_df so that pruned
+            # activities appear as "needing processing".
+            activities_to_process = (
+                self.activity_service.repository.get_activities_needing_processing(
+                    enriched_activities=raw_df,
+                )
+            )
 
             if activities_to_process.empty:
                 self.logger.info("No new activities to process")
@@ -137,6 +170,156 @@ class AnalysisService:
         except Exception as e:
             self.logger.error(f"Analysis workflow failed: {e}")
             raise ProcessingError(f"Error in analysis workflow: {e}") from e
+
+    # ------------------------------------------------------------------
+    # Checkpointing helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def _checkpoint_raw_path(self) -> Path:
+        return self._checkpoint_dir / ".checkpoint_raw.csv"
+
+    @property
+    def _checkpoint_moving_path(self) -> Path:
+        return self._checkpoint_dir / ".checkpoint_moving.csv"
+
+    @property
+    def _checkpoint_manifest_path(self) -> Path:
+        return self._checkpoint_dir / ".checkpoint_manifest.json"
+
+    def _has_checkpoint(self) -> bool:
+        """Return ``True`` if a valid checkpoint exists on disk."""
+        return (
+            self._checkpoint_manifest_path.exists()
+            and self._checkpoint_raw_path.exists()
+            and self._checkpoint_moving_path.exists()
+        )
+
+    def _load_checkpoint(
+        self,
+    ) -> tuple[list[dict], list[dict], set[int]]:
+        """Load checkpoint data from disk.
+
+        Returns:
+            Tuple of (raw_rows, moving_rows, processed_ids).
+            If the checkpoint is corrupt or missing, returns empty structures.
+        """
+        try:
+            with open(self._checkpoint_manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+            processed_ids = set(manifest.get("processed_ids", []))
+
+            raw_df = pd.read_csv(
+                self._checkpoint_raw_path, sep=CSVConstants.DEFAULT_SEPARATOR
+            )
+            moving_df = pd.read_csv(
+                self._checkpoint_moving_path, sep=CSVConstants.DEFAULT_SEPARATOR
+            )
+
+            raw_rows = raw_df.to_dict(orient="records")
+            moving_rows = moving_df.to_dict(orient="records")
+
+            self.logger.info(
+                "Resumed from checkpoint: %d activities already processed.",
+                len(processed_ids),
+            )
+            return raw_rows, moving_rows, processed_ids
+
+        except Exception as e:
+            self.logger.warning("Checkpoint load failed (%s) — starting fresh.", e)
+            self._cleanup_checkpoint()
+            return [], [], set()
+
+    def _save_checkpoint(
+        self,
+        raw_rows: list[dict],
+        moving_rows: list[dict],
+        processed_ids: set[int],
+    ) -> None:
+        """Persist intermediate processing state to disk.
+
+        Writes three files atomically-ish (manifest last so a partial write
+        of the CSVs is detected as invalid on the next load).
+        """
+        try:
+            self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame(raw_rows).to_csv(
+                self._checkpoint_raw_path,
+                index=False,
+                sep=CSVConstants.DEFAULT_SEPARATOR,
+            )
+            pd.DataFrame(moving_rows).to_csv(
+                self._checkpoint_moving_path,
+                index=False,
+                sep=CSVConstants.DEFAULT_SEPARATOR,
+            )
+
+            manifest = {
+                "saved_at": datetime.now().isoformat(),
+                "processed_ids": sorted(processed_ids),
+                "count": len(processed_ids),
+            }
+            with open(self._checkpoint_manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+
+            self.logger.info(
+                "Checkpoint saved — %d activities persisted.", len(processed_ids)
+            )
+        except Exception as e:
+            self.logger.warning("Checkpoint save failed: %s", e)
+
+    def _cleanup_checkpoint(self) -> None:
+        """Remove checkpoint files after a successful full save."""
+        for path in (
+            self._checkpoint_raw_path,
+            self._checkpoint_moving_path,
+            self._checkpoint_manifest_path,
+        ):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # ------------------------------------------------------------------
+
+    def _prune_activities_from_date(
+        self,
+        raw_df: pd.DataFrame,
+        moving_df: pd.DataFrame | None,
+        recompute_from: str,
+    ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+        """Strip activities on or after *recompute_from* from the existing data.
+
+        This causes the incremental processing loop to treat those activities
+        as "new" and recompute their metrics with the current settings.
+
+        Args:
+            raw_df: Existing raw enriched DataFrame.
+            moving_df: Existing moving enriched DataFrame (may be ``None``).
+            recompute_from: ISO-8601 date string (e.g. ``"2024-06-01"``).
+
+        Returns:
+            Pruned ``(raw_df, moving_df)`` tuple.
+        """
+        cutoff = pd.Timestamp(recompute_from, tz="UTC")
+        date_col = (
+            "start_date_local" if "start_date_local" in raw_df.columns else "start_date"
+        )
+
+        dates = pd.to_datetime(raw_df[date_col], utc=True)
+        keep_mask = dates < cutoff
+        removed = (~keep_mask).sum()
+
+        raw_df = raw_df.loc[keep_mask].reset_index(drop=True)
+        if moving_df is not None and not moving_df.empty:
+            moving_dates = pd.to_datetime(moving_df[date_col], utc=True)
+            moving_df = moving_df.loc[moving_dates < cutoff].reset_index(drop=True)
+
+        self.logger.info(
+            "Pruned %d activities from %s onward for recomputation.", removed, recompute_from,
+        )
+        return raw_df, moving_df
 
     def _apply_post_processing(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -200,7 +383,12 @@ class AnalysisService:
         self, activities_df: pd.DataFrame, historical_thresholds: pd.DataFrame | None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Process a set of activities.
+        Process a set of activities with checkpoint-based crash resilience.
+
+        Every ``self.checkpoint_interval`` activities the intermediate results
+        are flushed to disk so that a subsequent crash only loses at most that
+        many activities worth of work.  On the next run the checkpoint is
+        automatically detected and resumed.
 
         Args:
             activities_df: DataFrame of activities to process
@@ -211,11 +399,25 @@ class AnalysisService:
         """
         self.logger.info(f"Processing {len(activities_df)} activities")
 
-        raw_rows = []
-        moving_rows = []
+        # Attempt to resume from an existing checkpoint
+        raw_rows: list[dict] = []
+        moving_rows: list[dict] = []
+        already_processed: set[int] = set()
+
+        if self._has_checkpoint():
+            raw_rows, moving_rows, already_processed = self._load_checkpoint()
+
+        activities_since_checkpoint = 0
 
         for idx, activity_row in activities_df.iterrows():
             activity_id = activity_row["id"]
+
+            # Skip if already covered by the checkpoint
+            if int(activity_id) in already_processed:
+                self.logger.debug(
+                    "Skipping checkpointed activity %s", activity_id
+                )
+                continue
 
             try:
                 # Check if stream exists
@@ -228,24 +430,50 @@ class AnalysisService:
                     activity_row
                 )
 
-                # Combine metadata with raw metrics
-                raw_enriched = {**activity_row.to_dict(), **analysis_result.raw_metrics}
+                # Stamp settings used for this activity at processing time.
+                # This preserves the exact parameters per activity so that future
+                # config changes do not retroactively alter the recorded values.
+                settings_snapshot = self._build_settings_snapshot()
+
+                # Combine metadata with raw metrics and settings snapshot
+                raw_enriched = {
+                    **activity_row.to_dict(),
+                    **analysis_result.raw_metrics,
+                    **settings_snapshot,
+                }
                 raw_rows.append(raw_enriched)
 
-                # Combine metadata with moving metrics
+                # Combine metadata with moving metrics and settings snapshot
                 moving_enriched = {
                     **activity_row.to_dict(),
                     **analysis_result.moving_metrics,
+                    **settings_snapshot,
                 }
                 moving_rows.append(moving_enriched)
+
+                already_processed.add(int(activity_id))
+                activities_since_checkpoint += 1
 
                 self.logger.info(
                     f"Processed activity {activity_id} ({idx + 1}/{len(activities_df)})"
                 )
 
+                # Periodic checkpoint
+                if (
+                    self.checkpoint_interval > 0
+                    and activities_since_checkpoint >= self.checkpoint_interval
+                ):
+                    self._save_checkpoint(raw_rows, moving_rows, already_processed)
+                    activities_since_checkpoint = 0
+
             except Exception as e:
                 self.logger.error(f"Failed to process activity {activity_id}: {e}")
                 continue
+
+        # Final checkpoint so that if post-processing crashes the per-activity
+        # work is still recoverable.
+        if activities_since_checkpoint > 0:
+            self._save_checkpoint(raw_rows, moving_rows, already_processed)
 
         if not raw_rows:
             self.logger.warning("No activities were successfully processed")
@@ -296,13 +524,52 @@ class AnalysisService:
 
             self.logger.info("Results saved successfully")
 
+            # Clean up checkpoint files — they are no longer needed now that
+            # the final output has been written successfully.
+            self._cleanup_checkpoint()
+
         except Exception as e:
             self.logger.error(f"Failed to save results: {e}")
             raise ProcessingError(f"Failed to save results: {e}") from e
 
+    def _build_settings_snapshot(self) -> dict:
+        """
+        Build a snapshot of the current settings to be stamped on each newly
+        processed activity.
+
+        These values record which parameters were actually used to compute metrics
+        for that specific activity, so that future config changes do not
+        retroactively corrupt historical records.
+
+        Column naming:
+          - ftp, fthr, lt1_power, lt2_power, lt1_hr, lt2_hr: existing column names
+            (backward-compatible with CSVs produced before this fix)
+          - rider_weight_kg, settings_max_hr: new columns
+          - settings_cp, settings_w_prime: disambiguated from the computed rolling
+            cp/w_prime columns which are model outputs, not user inputs
+        """
+        return {
+            "ftp": self.settings.ftp,
+            "fthr": self.settings.fthr,
+            "lt1_power": self.settings.lt1_power,
+            "lt2_power": self.settings.lt2_power,
+            "lt1_hr": self.settings.lt1_hr,
+            "lt2_hr": self.settings.lt2_hr,
+            "rider_weight_kg": self.settings.rider_weight_kg,
+            "settings_max_hr": self.settings.max_hr,
+            "settings_cp": self.settings.cp,
+            "settings_w_prime": self.settings.w_prime,
+        }
+
     def _prepare_df_for_export(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Prepare a DataFrame for export by adding metadata and computing training load.
+        Prepare a DataFrame for export by computing longitudinal metrics.
+
+        Settings parameters (ftp, fthr, etc.) are no longer stamped here.
+        They are recorded per-activity at processing time via
+        _build_settings_snapshot(), so that future config changes do not
+        overwrite the parameters that were actually used to compute each
+        activity's metrics.
 
         Args:
             df: DataFrame to prepare
@@ -314,16 +581,6 @@ class AnalysisService:
             return df
 
         df_export = df.copy()
-
-        # Add FTP/FTHR columns for reference
-        df_export["ftp"] = self.settings.ftp
-        df_export["fthr"] = self.settings.fthr
-
-        # Add LT values (from stress test) for reference
-        df_export["lt1_power"] = self.settings.lt1_power
-        df_export["lt2_power"] = self.settings.lt2_power
-        df_export["lt1_hr"] = self.settings.lt1_hr
-        df_export["lt2_hr"] = self.settings.lt2_hr
 
         # Compute per-activity training load metrics (CTL, ATL, TSB, ACWR)
         df_export = self._compute_per_activity_training_load(df_export)

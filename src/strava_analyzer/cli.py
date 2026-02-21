@@ -80,12 +80,22 @@ def main():
     default=False,
     help="Force reprocessing of all activities",
 )
+@click.option(
+    "--recompute-from",
+    type=str,
+    default=None,
+    help=(
+        "Re-process activities from this date onward (ISO-8601, e.g. 2024-06-01). "
+        "Useful after changing FTP/FTHR/weight without re-processing the entire history."
+    ),
+)
 def run(
     config: Path | None,
     verbose: bool,
     activities: Path | None,
     streams_dir: Path | None,
     force: bool,
+    recompute_from: str | None,
 ) -> None:
     """
     Process all activities and generate comprehensive analysis.
@@ -123,24 +133,82 @@ def run(
             if settings.activities_enriched_file is not None:
                 if settings.activities_enriched_file.exists():
                     settings.activities_enriched_file.unlink()
+            recompute_from = None  # --force supersedes --recompute-from
+
+        if recompute_from:
+            logger.info(
+                "Re-processing activities from %s onward", recompute_from
+            )
 
         # Process activities and generate summary
         logger.info("Processing activities and generating analysis...")
-        dual_result, summary = pipeline.process_activities(activities_df)
+        pipeline.run(recompute_from=recompute_from if not force else None)
 
-        logger.info(f"Successfully processed {summary['total_activities']} activities")
+        # Load summary from saved file
+        summary_file = settings.processed_data_dir / "activity_summary.json"
+        if summary_file.exists():
+            import json
 
-        # Display summary statistics
-        click.echo("\n" + "=" * 50)
-        click.echo("ANALYSIS COMPLETE")
-        click.echo("=" * 50)
-        click.echo(f"\nTotal Activities: {summary['total_activities']}")
-        click.echo(f"Training Load Status: {summary['training_load']['status']}")
-        click.echo(f"CTL: {summary['training_load']['ctl']:.1f}")
-        click.echo(f"ATL: {summary['training_load']['atl']:.1f}")
-        click.echo(f"TSB: {summary['training_load']['tsb']:.1f}")
-        click.echo(f"ACWR: {summary['training_load']['acwr']:.2f}")
+            with open(summary_file, encoding="utf-8") as f:
+                summary = json.load(f)
+
+            click.echo("\n" + "=" * 50)
+            click.echo("ANALYSIS COMPLETE")
+            click.echo("=" * 50)
+            click.echo(f"\nTotal Activities: {summary.get('total_activities', 'N/A')}")
+            tl = summary.get("training_load", {})
+            click.echo(f"Training Load Status: {tl.get('status', 'N/A')}")
+            click.echo(f"CTL: {tl.get('chronic_training_load', 0):.1f}")
+            click.echo(f"ATL: {tl.get('acute_training_load', 0):.1f}")
+            click.echo(f"TSB: {tl.get('training_stress_balance', 0):.1f}")
+            click.echo(f"ACWR: {tl.get('acwr', 0):.2f}")
+        else:
+            click.echo("\nAnalysis complete.")
         click.echo(f"\nResults saved to: {settings.processed_data_dir}")
+
+    except StravaAnalyzerError as e:
+        logger.error(f"Processing failed: {str(e)}")
+        raise click.Abort() from e
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise click.Abort() from e
+
+
+@main.command("process-activity")
+@click.argument("activity_id", type=int)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to configuration file",
+)
+@click.option(
+    "--verbose/--quiet",
+    default=False,
+    help="Enable verbose output",
+)
+def process_activity(
+    activity_id: int,
+    config: Path | None,
+    verbose: bool,
+) -> None:
+    """Process a single activity by Strava ID.
+
+    Computes metrics for the specified activity and appends the result
+    to the existing enriched output files, then re-runs longitudinal
+    post-processing (CTL/ATL/TSB, CP model).
+
+    Usage: strava-analyzer process-activity 1234567890
+    """
+    configure_logging(verbose)
+    logger = logging.getLogger(__name__)
+    settings = load_settings(config)
+    settings.processed_data_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        pipeline = Pipeline(settings)
+        pipeline.process_single_activity(activity_id)
+        click.echo(f"\nActivity {activity_id} processed successfully.")
+        click.echo(f"Results saved to: {settings.processed_data_dir}")
 
     except StravaAnalyzerError as e:
         logger.error(f"Processing failed: {str(e)}")

@@ -113,47 +113,63 @@ class Settings(BaseSettings):
 
     def _compute_hr_zones(self) -> None:
         """
-        Compute HR zones dynamically based on physiological thresholds.
+        Compute HR zones dynamically using a three-tier model hierarchy.
 
-        Uses a LT-based 5-zone model when LT1/LT2 are available:
-        - Z1 (Recovery): 0 to LT1
-        - Z2 (Endurance): LT1 to LT2
-        - Z3 (Threshold): LT2 to FTHR
-        - Z4 (VO2max): FTHR to MaxHR
-        - Z5 (Max): MaxHR+
+        Tier 1 — LT-based (most precise): requires lt1_hr + lt2_hr + fthr.
+          Zones are physiologically anchored to actual lactate inflection points.
+          - Z1 (Recovery): 0 to LT1
+          - Z2 (Endurance): LT1 to LT2
+          - Z3 (Threshold): LT2 to FTHR
+          - Z4 (VO2max): FTHR to max HR
+          - Z5 (Max): max HR+
 
-        Falls back to percentage-based model if LT values not available.
+        Tier 2 — Coggan %-based (moderate): requires fthr only.
+          Standard percentage-of-FTHR model. Assumes typical HR/lactate relationship.
+
+        Tier 3 — Max-HR %-based (simplest): requires max_hr only.
+          Percentage-of-max-HR zones. Most stable over time since max HR is
+          invariant to training state. Best entry point for new users.
+          - Z1 (Recovery): 0-60% max HR
+          - Z2 (Endurance): 60-70% max HR
+          - Z3 (Tempo): 70-80% max HR
+          - Z4 (Threshold): 80-90% max HR
+          - Z5 (VO2max+): 90-100% max HR
         """
-        if self.fthr <= 0:
-            # If FTHR not set, don't override existing zones
+        if self.fthr <= 0 and self.max_hr <= 0:
+            # No valid HR inputs configured — keep existing default zones
             return
 
-        # Use LT-based model if LT1 and LT2 are provided
-        if self.lt1_hr is not None and self.lt2_hr is not None:
-            # Estimate max HR as FTHR + ~6 bpm (typical for cycling)
-            max_hr = int(self.fthr + 6)
+        # Tier 1: LT-based model (most precise)
+        if self.fthr > 0 and self.lt1_hr is not None and self.lt2_hr is not None:
+            # Use configured max_hr if available, otherwise estimate from FTHR
+            upper_hr = self.max_hr if self.max_hr > 0 else int(self.fthr + 6)
 
             self.hr_zone_ranges = {
-                "hr_zone_1": (0, int(self.lt1_hr)),  # Recovery: below LT1
-                "hr_zone_2": (
-                    int(self.lt1_hr),
-                    int(self.lt2_hr),
-                ),  # Endurance: LT1 to LT2
-                "hr_zone_3": (
-                    int(self.lt2_hr),
-                    int(self.fthr),
-                ),  # Threshold: LT2 to FTHR
-                "hr_zone_4": (int(self.fthr), max_hr),  # VO2max: FTHR to MaxHR
-                "hr_zone_5": (max_hr, float("inf")),  # Max: above MaxHR
+                "hr_zone_1": (0, int(self.lt1_hr)),              # Recovery: below LT1
+                "hr_zone_2": (int(self.lt1_hr), int(self.lt2_hr)),  # Endurance: LT1-LT2
+                "hr_zone_3": (int(self.lt2_hr), int(self.fthr)),    # Threshold: LT2-FTHR
+                "hr_zone_4": (int(self.fthr), upper_hr),            # VO2max: FTHR-MaxHR
+                "hr_zone_5": (upper_hr, float("inf")),              # Max: above MaxHR
             }
-        else:
-            # Fallback to Coggan's percentage-based 5-zone model
+
+        # Tier 2: Coggan percentage-based model
+        elif self.fthr > 0:
             self.hr_zone_ranges = {
                 "hr_zone_1": (0, int(0.85 * self.fthr)),
                 "hr_zone_2": (int(0.85 * self.fthr), int(0.95 * self.fthr)),
                 "hr_zone_3": (int(0.95 * self.fthr), int(1.05 * self.fthr)),
                 "hr_zone_4": (int(1.05 * self.fthr), int(1.20 * self.fthr)),
                 "hr_zone_5": (int(1.20 * self.fthr), float("inf")),
+            }
+
+        # Tier 3: Max-HR percentage-based model (max_hr > 0 guaranteed by outer guard)
+        else:
+            self.hr_zone_ranges = {
+                "hr_zone_1": (0, int(0.60 * self.max_hr)),
+                "hr_zone_2": (int(0.60 * self.max_hr), int(0.70 * self.max_hr)),
+                "hr_zone_3": (int(0.70 * self.max_hr), int(0.80 * self.max_hr)),
+                "hr_zone_4": (int(0.80 * self.max_hr), int(0.90 * self.max_hr)),
+                "hr_zone_5": (int(0.90 * self.max_hr), float("inf")),
             }
 
     # --- Activity Stream Columns Configuration ---
@@ -292,8 +308,31 @@ class Settings(BaseSettings):
     atl_days: int = 7
     ctl_days: int = 28  # Aligned with Analysis_plan.md
 
-    # --- Rider Weight (Placeholder) ---
+    # --- Rider Weight ---
     rider_weight_kg: float = 77.0
+
+    # --- Maximum Heart Rate ---
+    # Used as fallback for HR zone calculations when FTHR is not configured.
+    # Very stable over time (declines ~0.7 bpm/year with age), rarely needs retesting.
+    # Can be observed from hard efforts in activity data.
+    # Set to 0 to disable max-HR-based zone calculations.
+    max_hr: int = 0
+
+    @property
+    def effective_fthr(self) -> float:
+        """
+        Effective FTHR for heart-rate-based metric calculations.
+
+        Returns fthr directly if configured (> 0).
+        Otherwise estimates from max_hr using the standard approximation
+        FTHR ≈ 89% of max HR (valid for most trained cyclists/runners).
+        Returns 0.0 if neither fthr nor max_hr is configured.
+        """
+        if self.fthr > 0:
+            return float(self.fthr)
+        if self.max_hr > 0:
+            return round(0.89 * self.max_hr, 1)
+        return 0.0
 
     def get_power_zone_edges(self) -> list[float]:
         """
