@@ -12,8 +12,11 @@ NOTE: Pipeline now produces separate output files for raw and moving data:
 import logging
 from pathlib import Path
 
+import pandas as pd
+
+from .constants import CSVConstants
 from .exceptions import ProcessingError
-from .services import AnalysisService
+from .services import AnalysisService, DualAnalysisResult
 from .settings import Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -38,7 +41,7 @@ class Pipeline:
         self.analysis_service = AnalysisService(settings)
         self.logger = logging.getLogger(__name__)
 
-    def run(self) -> None:
+    def run(self, *, recompute_from: str | None = None) -> DualAnalysisResult:
         """
         Execute the complete analysis pipeline.
 
@@ -49,6 +52,14 @@ class Pipeline:
         4. Creates summaries
         5. Saves results to activities_raw.csv and activities_moving.csv
 
+        Args:
+            recompute_from: Optional ISO-8601 date (e.g. ``"2024-06-01"``).
+                Activities on or after this date are re-processed with the
+                current settings.
+
+        Returns:
+            DualAnalysisResult with raw_df, moving_df, and summary.
+
         Raises:
             ProcessingError: If pipeline execution fails
         """
@@ -58,7 +69,9 @@ class Pipeline:
             self.logger.info("=" * 60)
 
             # Run analysis workflow (returns DualAnalysisResult)
-            result = self.analysis_service.run_analysis()
+            result = self.analysis_service.run_analysis(
+                recompute_from=recompute_from,
+            )
 
             # Save results to separate files
             self.analysis_service.save_results(result)
@@ -68,6 +81,8 @@ class Pipeline:
             self.logger.info(f"Total activities (raw): {len(result.raw_df)}")
             self.logger.info(f"Total activities (moving): {len(result.moving_df)}")
             self.logger.info("=" * 60)
+
+            return result
 
         except Exception as e:
             self.logger.error(f"Pipeline failed: {e}")
@@ -114,6 +129,69 @@ class Pipeline:
         except Exception as e:
             self.logger.error(f"Processing failed: {e}")
             raise ProcessingError(f"Pipeline execution failed: {e}") from e
+
+    def process_single_activity(self, activity_id: int) -> None:
+        """Process a single activity by ID and append to existing output.
+
+        Loads existing enriched data, processes the specified activity (if it
+        hasn't been processed already), merges the result, re-runs
+        post-processing (longitudinal metrics), and saves.
+
+        Args:
+            activity_id: Strava activity ID to process.
+
+        Raises:
+            ProcessingError: If processing fails.
+        """
+        try:
+            self.logger.info("=" * 60)
+            self.logger.info(f"Processing single activity {activity_id}")
+            self.logger.info("=" * 60)
+
+            # Use recompute_from trick: prune this specific activity from
+            # existing data, then let the incremental loop pick it up.
+            # But simpler: just call run_analysis which already handles
+            # incremental processing. If the activity is new, it'll be
+            # processed. If it already exists, nothing happens (unless forced).
+
+            # Force re-process by pruning the specific activity
+            raw_file = self.settings.processed_data_dir / "activities_raw.csv"
+            moving_file = self.settings.processed_data_dir / "activities_moving.csv"
+
+            if raw_file.exists():
+                raw_df = pd.read_csv(
+                    raw_file, sep=CSVConstants.DEFAULT_SEPARATOR
+                )
+                # Remove the activity if it already exists (to force re-process)
+                raw_df = raw_df[raw_df["id"] != activity_id].reset_index(drop=True)
+                raw_df.to_csv(
+                    raw_file, index=False, sep=CSVConstants.DEFAULT_SEPARATOR
+                )
+
+            if moving_file.exists():
+                moving_df = pd.read_csv(
+                    moving_file, sep=CSVConstants.DEFAULT_SEPARATOR
+                )
+                moving_df = moving_df[moving_df["id"] != activity_id].reset_index(
+                    drop=True
+                )
+                moving_df.to_csv(
+                    moving_file, index=False, sep=CSVConstants.DEFAULT_SEPARATOR
+                )
+
+            # Now run the normal pipeline — the activity will appear as "new"
+            result = self.analysis_service.run_analysis()
+            self.analysis_service.save_results(result)
+
+            self.logger.info("=" * 60)
+            self.logger.info(f"Single activity {activity_id} processed successfully")
+            self.logger.info("=" * 60)
+
+        except Exception as e:
+            self.logger.error(f"Single activity processing failed: {e}")
+            raise ProcessingError(
+                f"Failed to process activity {activity_id}: {e}"
+            ) from e
 
 
 def run_pipeline(config_path: str) -> None:

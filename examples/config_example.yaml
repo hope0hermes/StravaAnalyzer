@@ -49,7 +49,19 @@ ftp: 285.0
 # - Typical values: 140-190 bpm depending on fitness
 # - How to find it: Hold threshold power and measure average HR, or ramp test
 # - Impact: Basis for HR zones and hrTSS calculation
+# - HR zone model priority:
+#     1. fthr + lt1_hr + lt2_hr  → LT-based zones (most precise, retested every 6-12 weeks)
+#     2. fthr only               → Coggan %-based zones (retested every 4-8 weeks)
+#     3. max_hr only             → Max-HR %-based zones (simplest, most stable)
 fthr: 170
+
+# Maximum Heart Rate (bpm)
+# - Highest HR you can achieve at all-out effort
+# - Very stable over time (declines only ~0.7 bpm/year with age)
+# - Used as fallback for HR zone calculations when fthr is not configured
+# - Can be read directly from hard efforts in your activity history
+# - Set to 0 (or omit) if you have fthr configured above
+# max_hr: 195
 
 # Rider/Athlete Body Weight (kilograms)
 # - Current body weight in kg

@@ -46,7 +46,7 @@ class TIDCalculator(BaseMetricCalculator):
             power_tid = self._calculate_power_tid(stream_df["watts"], stream_df)
             metrics.update(power_tid)
 
-        if "heartrate" in stream_df.columns and self.settings.fthr > 0:
+        if "heartrate" in stream_df.columns and self.settings.effective_fthr > 0:
             hr_tid = self._calculate_hr_tid(stream_df["heartrate"], stream_df)
             metrics.update(hr_tid)
 
@@ -147,7 +147,9 @@ class TIDCalculator(BaseMetricCalculator):
         if total_time == 0:
             return {}
 
-        fthr = self.settings.fthr
+        # Use effective_fthr so that TID works when only max_hr is configured
+        # (effective_fthr returns fthr directly, or estimates it as 89% of max_hr)
+        fthr = self.settings.effective_fthr
 
         # 3-zone TID model based on HR
         zone1_threshold = HeartRateZoneThresholds.ZONE_1_MAX * fthr  # 82% FTHR

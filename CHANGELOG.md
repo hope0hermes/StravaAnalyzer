@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
+
+- Exported `Settings`, `load_settings`, `DualAnalysisResult`, and `AnalysisResult`
+  from the top-level package for clean library usage
+- `Pipeline.run()` now returns `DualAnalysisResult` instead of `None`
+- Loosened pydantic dependency pins from `~=2.11.7` to `>=2.9,<3` and
+  `pydantic-settings` from `~=2.10.1` to `>=2.6,<3`
+- Default `ftp`, `fthr`, `ftpace`, and `rider_weight_kg` changed from
+  author-specific values (285W, 170bpm, 5.0 min/km, 77kg) to `0` (not configured)
+  to prevent silently wrong metrics for new users
+- Removed unused `MetricPrefixes.RAW` and `MetricPrefixes.MOVING` constants
+  (legacy from prefix-based approach, now using separate output files)
+- Author email typo in pyproject.toml (missing `.com`)
 
 ## [1.4.1] - 2026-02-07
 

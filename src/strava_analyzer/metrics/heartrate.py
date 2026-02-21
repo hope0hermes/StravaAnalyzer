@@ -49,8 +49,9 @@ class HeartRateCalculator(BaseMetricCalculator):
             valid_hr = hr_data[hr_data > 0]
             metrics["max_hr"] = float(valid_hr.max()) if not valid_hr.empty else 0.0
 
-            # Calculate HR-based TSS if FTHR is configured
-            if self.settings.fthr and self.settings.fthr > 0:
+            # Calculate HR-based TSS if an effective FTHR can be derived
+            # (either from configured fthr or estimated from max_hr via effective_fthr)
+            if self.settings.effective_fthr > 0:
                 hr_tss = self._calculate_hr_tss(stream_df)
                 metrics["hr_training_stress"] = hr_tss
             else:
@@ -83,7 +84,7 @@ class HeartRateCalculator(BaseMetricCalculator):
         try:
             # Use time-weighted mean for HR intensity
             mean_hr = self._time_weighted_mean(hr_series, stream_df)
-            hr_intensity = mean_hr / self.settings.fthr
+            hr_intensity = mean_hr / self.settings.effective_fthr
 
             # Use actual duration
             duration_seconds = self._get_total_duration(stream_df)
